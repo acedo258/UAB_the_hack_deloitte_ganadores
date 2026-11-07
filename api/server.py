@@ -116,6 +116,16 @@ def alert(alert_id: str):
     return {**r[0]["raw"], "pattern": {k: v for k, v in _alert_pattern.get(alert_id, {}).items() if k != "alert_ids"}}
 
 
+@app.get("/api/packs/{alert_id}")
+@app.get("/packs/{alert_id}")
+def pack(alert_id: str):
+    from core.context import build_pack
+    try:
+        return build_pack(alert_id).model_dump(exclude={"trace"})
+    except KeyError:
+        raise HTTPException(404, "alerta no encontrada")
+
+
 @app.get("/api/events/{event_id}")
 def event(event_id: str):
     src = PREFIX_SOURCE.get(event_id.split("-")[0])
@@ -274,70 +284,8 @@ def containment_log():
 def list_incidents():
     """Devuelve los incidentes correlacionados con grafo y kill chain."""
     try:
-        from core.correlate import compute_incidents  # type: ignore[import-not-found]
+        from core.correlate import compute_incidents
         return compute_incidents()
-    except (ImportError, AttributeError):
-        pass
-
-    # Incidentes pre-correlacionados de referencia (Historias verificadas del reto)
-    return [
-        {
-            "incident_id": "INC-2026-001",
-            "title": "Campaña Ransomware: Compromiso Marta Puig (Latrodectus → Cobalt Strike → VSS)",
-            "severity": "critical",
-            "status": "investigating",
-            "primary_entity": "mpuig@tarvia.example",
-            "impact_summary": "Infección inicial por phishing, elevación de privilegios vía LSASS, movimiento lateral PsExec y borrado masivo de Shadow Copies.",
-            "alerts": [
-                "ALR-20261009-011790", "ALR-20261009-011791", "ALR-20261009-011792", "ALR-20261009-011793",
-                "ALR-20261010-011794", "ALR-20261010-011795", "ALR-20261010-011796", "ALR-20261010-011797", "ALR-20261010-011798"
-            ],
-            "timeline": [
-                {"ts": "2026-10-09 09:14", "phase": "Acceso Inicial", "event": "Phishing bancario abierto y ejecutable malicioso Latrodectus iniciado"},
-                {"ts": "2026-10-09 10:22", "phase": "Ejecución & C2", "event": "Inyección de beacon de Cobalt Strike en proceso del sistema"},
-                {"ts": "2026-10-09 14:05", "phase": "Robo de Credenciales", "event": "Volcado de memoria de LSASS en estación de trabajo"},
-                {"ts": "2026-10-10 02:30", "phase": "Movimiento Lateral", "event": "Uso de PsExec hacia controladores de dominio y servidores"},
-                {"ts": "2026-10-10 03:15", "phase": "Impacto", "event": "Ejecución de vssadmin delete shadows masivo para impedir recuperación"}
-            ],
-            "nodes": [
-                {"id": "u:mpuig", "label": "mpuig@tarvia.example", "type": "user"},
-                {"id": "h:PC-MPUIG", "label": "PC-MPUIG (10.0.4.15)", "type": "host"},
-                {"id": "f:latro.exe", "label": "invoice_doc.exe", "type": "file"},
-                {"id": "c2:cobalt", "label": "update.services-cdn.net", "type": "c2"},
-                {"id": "h:SRV-DC01", "label": "SRV-DC01 (Controlador)", "type": "target"},
-            ],
-            "edges": [
-                {"source": "u:mpuig", "target": "h:PC-MPUIG", "label": "Sesión interactiva"},
-                {"source": "h:PC-MPUIG", "target": "f:latro.exe", "label": "Descarga y ejecuta"},
-                {"source": "f:latro.exe", "target": "c2:cobalt", "label": "Beaconing C2"},
-                {"source": "h:PC-MPUIG", "target": "h:SRV-DC01", "label": "PsExec lateral"}
-            ]
-        },
-        {
-            "incident_id": "INC-2026-002",
-            "title": "Fraude Financiero BEC / AiTM: Suplantación Laura Ferrer (148.320 €)",
-            "severity": "high",
-            "status": "contained",
-            "primary_entity": "lferrer@tarvia.example",
-            "impact_summary": "Ataque Adversary-in-the-Middle evadiendo MFA, creación silenciosa de regla de desvío en buzón y modificación de IBAN en factura de proveedores.",
-            "alerts": [
-                "ALR-20261007-011785", "ALR-20261007-011786", "ALR-20261007-011787", "ALR-20261007-011788", "ALR-20261008-011789"
-            ],
-            "timeline": [
-                {"ts": "2026-10-07 11:02", "phase": "Acceso Inicial", "event": "Inicio de sesión AiTM desde IP anónima saltándose MFA"},
-                {"ts": "2026-10-07 11:15", "phase": "Persistencia", "event": "Creación de regla oculta en Outlook para mover correos financieros a RSS"},
-                {"ts": "2026-10-08 08:45", "phase": "Exfiltración & Fraude", "event": "Envío de factura manipulada con cambio de cuenta bancaria a 148.320 €"}
-            ],
-            "nodes": [
-                {"id": "u:lferrer", "label": "lferrer@tarvia.example", "type": "user"},
-                {"id": "ip:proxy", "label": "185.220.101.44 (Tor/Proxy)", "type": "ip"},
-                {"id": "rule:inbox", "label": "Regla Outlook 'Delete Invoice'", "type": "rule"},
-                {"id": "o365:mailbox", "label": "Exchange Online", "type": "service"}
-            ],
-            "edges": [
-                {"source": "ip:proxy", "target": "u:lferrer", "label": "AiTM Login"},
-                {"source": "u:lferrer", "target": "rule:inbox", "label": "Crea regla silenciosa"},
-                {"source": "rule:inbox", "target": "o365:mailbox", "label": "Oculta notificaciones"}
-            ]
-        }
-    ]
+    except Exception as e:  # noqa: BLE001
+        print(f"[AVISO] No se pudieron calcular los incidentes: {e}")
+        return []

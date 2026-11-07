@@ -5,5 +5,7 @@ data/*
 __pycache__/
 .pytest_cache/
 ui/node_modules/
+web/node_modules/
 ui/dist/
+.venv/
 *.pyc
