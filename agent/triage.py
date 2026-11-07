@@ -205,7 +205,10 @@ def _final_json(msgs: list[dict], first_text: str | None, emit: OnStep, tokens: 
             emit(TraceStep(step=0, kind="llm", tool=f"{label} ({_model()})",
                            input={"intento": attempt + 1, "tokens_estimados": est, "num_ctx": llm.num_ctx(), **timings},
                            result_summary=("⚠ el contexto puede no caber en la ventana del modelo · " if est > llm.num_ctx() else "")
-                           + f"{out.verdict} · conf {out.confidence:.2f} · {tokens} tokens", ms=int((time.time() - t) * 1000), ts=_now()))
+                           + f"{out.verdict} · conf {out.confidence:.2f} · {tokens} tokens"
+                           + (f" (salida {timings['tokens_salida']}, razonando {timings.get('tokens_razonamiento', 0)})"
+                              if timings.get("tokens_salida") else ""),
+                           ms=int((time.time() - t) * 1000), ts=_now()))
             return out
         except (ValueError, ValidationError) as e:
             emit(TraceStep(step=0, kind="llm", tool=label, input={"intento": attempt + 1},

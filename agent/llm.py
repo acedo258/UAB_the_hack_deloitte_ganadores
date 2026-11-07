@@ -32,7 +32,8 @@ def client():
     api_key = os.getenv("LLM_API_KEY", config.LLM_API_KEY)
     if _client is None or _client_cfg != (base_url, api_key):
         from openai import OpenAI
-        _client = OpenAI(base_url=base_url, api_key=api_key, timeout=config.LLM_TIMEOUT_S, max_retries=2)
+        # Sin reintentos de la librería: con un servidor que no contesta, 2 reintentos convertían 2 min de espera en 6.
+        _client = OpenAI(base_url=base_url, api_key=api_key, timeout=config.LLM_TIMEOUT_S, max_retries=0)
         _client_cfg = (base_url, api_key)
     return _client
 
@@ -151,8 +152,20 @@ def chat(messages: list[dict], tools: list[dict] | None = None, json_mode: bool 
         kwargs["response_format"] = {"type": "json_object"}
     for attempt in range(4):
         try:
+            t0 = time.time()
             r = client().chat.completions.create(**kwargs)
-            return r.choices[0].message, (r.usage.total_tokens if r.usage else 0)
+            m = r.choices[0].message
+            u = r.usage
+            det = getattr(u, "completion_tokens_details", None) if u else None
+            from types import SimpleNamespace
+            timings = {"servidor_s": round(time.time() - t0, 1),
+                         "tokens_prompt": getattr(u, "prompt_tokens", 0) or 0,
+                         "tokens_salida": getattr(u, "completion_tokens", 0) or 0,
+                         "tokens_razonamiento": getattr(det, "reasoning_tokens", 0) or 0,
+                         "fin": r.choices[0].finish_reason or "",
+                         "opciones_extra": "extra_body" in kwargs}
+            out = SimpleNamespace(content=m.content, tool_calls=m.tool_calls, timings=timings)
+            return out, (u.total_tokens if u else 0)
         except Exception as e:  # noqa: BLE001
             msg = str(e)
             if ("429" in msg or "rate" in msg.lower()) and attempt < 3:
