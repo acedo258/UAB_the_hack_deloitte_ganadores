@@ -291,7 +291,9 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
         if can_use_fp and fp_cache.exists():
             raw = json.loads(fp_cache.read_text(encoding="utf-8"))
             src_alert = raw.pop("source_alert", "")
-            out = _adapt_reused(LLMTriage.model_validate(raw), pack, fp, src_alert, seen)
+            out = LLMTriage.model_validate(raw)
+            if src_alert != alert_id:          # la propia alerta que originó la huella no se adapta
+                out = _adapt_reused(out, pack, fp, src_alert, seen)
             from_fp_cache = True
             emit(TraceStep(step=0, kind="llm", tool="llm.cache_fingerprint", input={"pattern_id": fp},
                            result_summary=f"{out.verdict} · conf {out.confidence:.2f} (reutilizado de huella {fp})", ts=_now()))
