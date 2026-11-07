@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from core.schemas import TraceStep
-from core.store import norm_user, rows
+from core.store import hubs, is_hub, norm_user, rows
 
 PREFIX_SOURCE = {
     "ADE": "ad_events", "AIG": "ai_gateway", "CI": "cicd_builds", "CT": "cloudtrail", "DLP": "dlp", "DNS": "dns",
@@ -77,6 +77,8 @@ class ToolBox:
 
     def alerts_for_entity(self, entity: str, desde: str, hasta: str, exclude: str = "", limit: int = 15) -> list[dict]:
         def f():
+            if is_hub(_ent(entity)):   # una entidad compartida por cientos no relaciona alertas
+                return []
             return rows("""SELECT a.alert_id, a.created_at, a.rule_id, a.rule_name, a.severity
                 FROM alert_entities e JOIN alerts a USING(alert_id)
                 WHERE e.entity = ? AND a.created_at BETWEEN ? AND ? AND a.alert_id <> ?
@@ -145,10 +147,15 @@ class ToolBox:
                 r = rows(f"SELECT to_json(t) AS raw FROM {i['source']} t WHERE event_id = ?", [i["event_id"]])
                 if r:
                     events.append({"ts": i["ts"], "source": i["source"], "event_id": i["event_id"], "line": compact(r[0]["raw"])})
-            return {"entity": e, "counts": {c["source"]: c["n"] for c in counts}, "events": events,
-                    "truncated": sum(c["n"] for c in counts) > len(events)}
+            out = {"entity": e, "counts": {c["source"]: c["n"] for c in counts}, "events": events,
+                   "truncated": sum(c["n"] for c in counts) > len(events)}
+            h = hubs().get(e)
+            if h:   # avisamos al agente: compartir un hub no relaciona dos cosas
+                out["hub"] = f"{h['kind']}: {h['reason']}"
+            return out
         return self._run("entity_timeline", {"entity": entity, "desde": desde, "hasta": hasta}, f,
-                         lambda r: f"{sum(r['counts'].values())} eventos: " + ", ".join(f"{k} {v}" for k, v in r["counts"].items()) if r["counts"] else "sin actividad")
+                         lambda r: (f"[{r['hub']}] " if r.get("hub") else "") +
+                         (f"{sum(r['counts'].values())} eventos: " + ", ".join(f"{k} {v}" for k, v in r["counts"].items()) if r["counts"] else "sin actividad"))
 
     def search_logs(self, source: str, contains: str = "", desde: str = "", hasta: str = "", limit: int = 30) -> dict:
         """Búsqueda de texto en una fuente (como la API simulada, pero en milisegundos)."""
@@ -203,6 +210,21 @@ class ToolBox:
             return out
         return self._run("matching_changes", {"entities": entities, "ts": ts}, f,
                          lambda r: ", ".join(f"{c['id']} ({', '.join(c['matched'])})" for c in r) or "ningún cambio aprobado encaja")
+
+    # ------------------------------------------------------------ comparación con lo habitual
+    def baseline(self, question: str, entity: str, other: str = "", ts: str = "") -> dict:
+        """¿Es la primera vez que…? question: user_origin(usuario, ip) · host_domain(equipo, dominio) ·
+        prevalence(hash o fichero) · account_host(usuario, equipo) · user_hours(usuario) · key_origin(clave, ip)."""
+        from core.baseline import QUESTIONS
+        def f():
+            fn = QUESTIONS.get(question)
+            if not fn:
+                return {"error": f"pregunta desconocida; usa una de {sorted(QUESTIONS)}"}
+            t = ts or datetime.now(timezone.utc).isoformat()
+            args = (entity, t) if question in ("prevalence", "user_hours") else (entity, other, t)
+            return fn(*args).model_dump()
+        return self._run("baseline", {"question": question, "entity": entity, "other": other, "ts": ts}, f,
+                         lambda r: r.get("error") or (("⚠ " if r["attention"] else "") + r["answer"]))
 
     # ------------------------------------------------------------ despacho para el modo investigador
     def call(self, name: str, args: dict) -> Any:
@@ -278,7 +300,7 @@ def _intel_summary(r: dict) -> str:
 
 
 TOOL_NAMES = {"get_alert", "alerts_for_entity", "get_asset", "get_user", "get_events", "entity_timeline",
-              "search_logs", "intel", "matching_changes"}
+              "search_logs", "intel", "matching_changes", "baseline"}
 
 TOOL_SPECS = [
     {"type": "function", "function": {"name": "get_asset", "description": "CMDB: criticidad, zona, servicio y vulnerabilidades de un host, IP o rango (WEB-ECOM01..04)",
@@ -298,6 +320,11 @@ TOOL_SPECS = [
     {"type": "function", "function": {"name": "alerts_for_entity", "description": "Otras alertas del SIEM de una entidad entre dos fechas",
      "parameters": {"type": "object", "properties": {"entity": {"type": "string"}, "desde": {"type": "string"}, "hasta": {"type": "string"}},
                     "required": ["entity", "desde", "hasta"]}}},
+    {"type": "function", "function": {"name": "baseline", "description": "¿Es la primera vez que…? Compara con el historial previo a ts. "
+     "question: user_origin (entity=usuario, other=ip) · host_domain (entity=equipo, other=dominio) · prevalence (entity=hash o fichero) · "
+     "account_host (entity=usuario, other=equipo) · user_hours (entity=usuario) · key_origin (entity=clave AWS, other=ip)",
+     "parameters": {"type": "object", "properties": {"question": {"type": "string", "enum": ["user_origin", "host_domain", "prevalence", "account_host", "user_hours", "key_origin"]},
+                    "entity": {"type": "string"}, "other": {"type": "string"}, "ts": {"type": "string"}}, "required": ["question", "entity", "ts"]}}},
     {"type": "function", "function": {"name": "matching_changes", "description": "Cambios o flujos aprobados vigentes en una fecha que mencionan alguna de las entidades",
      "parameters": {"type": "object", "properties": {"entities": {"type": "array", "items": {"type": "string"}}, "ts": {"type": "string"}},
                     "required": ["entities", "ts"]}}},

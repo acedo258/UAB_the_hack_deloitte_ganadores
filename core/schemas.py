@@ -42,6 +42,16 @@ class IntelResult(BaseModel):
     malicious: Optional[bool] = None   # None = desconocido (¡no es limpio!)
 
 
+class Check(BaseModel):
+    """Una comprobación del runbook resuelta por código (core/recipes.py). El agente la lee; no decide nada."""
+    id: str                        # p. ej. "RB-01.clics"
+    question: str                  # la comprobación del runbook
+    answer: str                    # el hecho en una línea (recuentos, primera vez...)
+    attention: bool = False        # True = dato anómalo según una regla simple; NO es un veredicto
+    count: Optional[int] = None
+    events: list[dict[str, Any]] = []   # pocos eventos de apoyo, con event_id para citarlos
+
+
 class ContextPack(BaseModel):
     alert: dict[str, Any]
     entities: dict[str, Any] = {}                # entidades de la alerta
@@ -55,6 +65,7 @@ class ContextPack(BaseModel):
     related_events: list[dict[str, Any]] = []    # los de alert.related_events
     timeline: list[dict[str, Any]] = []          # otros eventos de las entidades en ±24 h (resumidos)
     other_alerts: list[dict[str, Any]] = []      # otras alertas de las mismas entidades
+    checks: list[Check] = []                     # comprobaciones del runbook ya resueltas (recetas)
     untrusted_fields: list[UntrustedField] = []
     notes: list[str] = []                        # avisos del constructor (truncados, no encontrados...)
     trace: list[TraceStep] = []
