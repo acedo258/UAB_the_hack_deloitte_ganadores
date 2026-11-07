@@ -3,6 +3,8 @@ const j = async (r) => {
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText)
   return r.json()
 }
+const post = (body) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+
 export const api = {
   stats: () => fetch('/api/stats').then(j),
   queue: (p = {}) => fetch('/api/queue?' + new URLSearchParams(p)).then(j),
@@ -11,7 +13,10 @@ export const api = {
   event: (id) => fetch(`/api/events/${id}`).then(j),
   patterns: (min = 1) => fetch(`/api/patterns?min_count=${min}`).then(j),
   decide: (body) => fetch('/api/decisions', post(body)).then(j),
+  decisions: () => fetch('/api/decisions').then(j),
   contain: (body) => fetch('/api/containment', post(body)).then(j),
+  containmentLog: () => fetch('/api/containment/log').then(j),
+  incidents: () => fetch('/api/incidents').then(j),
   // Triaje en directo: onStep(TraceStep) por cada paso, onTicket(Ticket) al final
   triage(id, { deep = false, force = false, onStep, onTicket, onError }) {
     const es = new EventSource(`/api/triage/${id}/stream?deep=${deep}&force=${force}`)
@@ -21,7 +26,6 @@ export const api = {
     return es
   },
 }
-const post = (body) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
 export const SEV_TYPE = { informational: 'default', low: 'info', medium: 'warning', high: 'error', critical: 'error' }
 export const VERDICT_LABEL = {
