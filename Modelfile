@@ -1,3 +1,8 @@
 FROM qwen3:4b
-PARAMETER num_ctx 12288
+# 10240: cabe el pack más grande (~9.400 tokens) y, con OLLAMA_KV_CACHE_TYPE=q8_0 y OLLAMA_FLASH_ATTENTION=1,
+# todo el modelo entra en una GPU de 4 GB (RTX 3050 Laptop). Con 12288 el 20 % iba por CPU (28 tokens/s frente a 51).
+PARAMETER num_ctx 10240
+# Todas las capas en la GPU: Ollama reserva demasiado margen y dejaba parte en la CPU. Si en otra máquina da
+# "out of memory", quita esta línea y vuelve a hacer `ollama create`.
+PARAMETER num_gpu 99
 PARAMETER temperature 0.1

@@ -58,10 +58,11 @@ TOOLS_TOKENS = 1024        # sitio para la descripción de las herramientas (mod
 
 def num_ctx() -> int:
     """Ventana de contexto que se pide a Ollama. Con 8192, el pack más grande + prompt + runbook + respuesta pasa de
-    8.000 tokens y Ollama recorta por el PRINCIPIO, que es donde están las reglas. 12288 cubre el peor caso medido
-    (~9.400 tokens en modo rápido, ~10.400 con herramientas). Es fijo a propósito: si cambia entre llamadas, Ollama
-    recarga el modelo. Se cambia con LLM_NUM_CTX."""
-    return int(os.getenv("LLM_NUM_CTX", "12288"))
+    8.000 tokens y Ollama recorta por el PRINCIPIO, que es donde están las reglas. 10240 cubre el peor caso medido en
+    modo rápido (~9.400 tokens) y, con la caché de contexto en q8_0, deja el modelo entero en una GPU de 4 GB (12288 no
+    cabía y el 20 % iba por CPU, a la mitad de velocidad). En modo investigador se dejan de pedir herramientas al 90 %.
+    Es fijo a propósito: si cambia entre llamadas, Ollama recarga el modelo. Se cambia con LLM_NUM_CTX."""
+    return int(os.getenv("LLM_NUM_CTX", "10240"))
 
 
 def estimate_tokens(messages: list[dict], tools: list[dict] | None = None) -> int:
