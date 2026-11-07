@@ -238,7 +238,7 @@ def _incident(members, alerts, ents, links, origin, pattern_of) -> dict:
         next((e for (e, et), _ in touch.most_common() if et == "host"), None) or \
         (touch.most_common(1)[0][0][0] if touch else "")
 
-    sev = max((alerts[a]["severity"] for a in members), key=lambda s: SEV_ORDER.index(s) if s in SEV_ORDER else 0)
+    sev, sev_why = _matrix_severity(members, alerts, ents)
     phases_seen = sorted({PHASE_ES.get(alerts[a]["tactica"] or "", alerts[a]["tactica"] or "Otra") for a in members},
                          key=lambda p: PHASE_RANK.get(p, 99))
     rules = Counter(alerts[a]["rule_id"] for a in members)
@@ -257,6 +257,7 @@ def _incident(members, alerts, ents, links, origin, pattern_of) -> dict:
         "incident_id": "",
         "title": f"{' → '.join(phases_seen)} · {primary}",
         "severity": sev,
+        "severity_rationale": sev_why,
         "status": "investigating",
         "primary_entity": primary,
         "impact_summary": (f"{len(members)} alertas de {len(rules)} reglas entre {local_time(first)} y {local_time(last)}. "
@@ -272,6 +273,21 @@ def _incident(members, alerts, ents, links, origin, pattern_of) -> dict:
         "nodes": nodes,
         "edges": edges,
     }
+
+
+def _matrix_severity(members: list[str], alerts: dict, ents: dict[str, set]) -> tuple[str, str]:
+    """Severidad del incidente = la mayor de sus alertas según la matriz de la política (regla × criticidad real del
+    activo más crítico de esa alerta en la CMDB; Media si no hay activo), igual que el triaje (core/policy.py)."""
+    from core.policy import CRIT, MATRIX
+    crit = {r["h"]: r["c"] for r in rows("SELECT upper(hostname) h, criticality c FROM activos")}
+    best, why = "informational", ""
+    for a in members:
+        cs = [crit[e] for e, et, src in ents[a] if et == "host" and crit.get(e) in CRIT]
+        c = max(cs, key=CRIT.index) if cs else None
+        s = MATRIX.get(alerts[a]["severity"], MATRIX["medium"])[CRIT.index(c) if c else 1]
+        if SEV_ORDER.index(s) > SEV_ORDER.index(best):
+            best, why = s, f"{a}: regla {alerts[a]['severity']} × activo {c or 'Media (sin activo en la CMDB)'} = {s}"
+    return best, why
 
 
 def _graph(members: list[str], ents: dict[str, set], alerts: dict) -> tuple[list[dict], list[dict]]:

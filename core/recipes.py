@@ -581,8 +581,19 @@ def rb08(c: Ctx) -> None:
                      WHERE src_ip = ? AND ts BETWEEN ? AND ? AND (zone_dst = 'LOGISTICS-OT' OR dst_port IN ({_in(list(OT_PORTS))}))
                      GROUP BY ALL ORDER BY primero LIMIT 8""", [ip, iso(c.t - D), iso(c.t + D)] + list(OT_PORTS))
         ok = host in OT_AUTHORIZED
-        return (f"origen {host} ({ip}) {'AUTORIZADO' if ok else 'NO está entre los autorizados (ENG-WS01, WMS01)'}; "
-                f"{sum(x['n'] for x in r)} conexiones hacia OT en ±24 h", not ok, r, len(r))
+        n = sum(x["n"] for x in r)
+        if ok:
+            return f"origen {host} ({ip}) AUTORIZADO; {n} conexiones hacia OT en ±24 h", False, r, len(r)
+        # RB-08.1: cualquier otro origen necesita un cambio aprobado. Si lo hay y encaja, no es anómalo (pero se verifica)
+        changes = c.tb.matching_changes([host, ip, str(c.ev.get("firewall_rule") or "")], c.a["created_at"],
+                                        alert_text=json.dumps(c.ev, ensure_ascii=False))
+        if changes:
+            ids = ", ".join(ch["id"] for ch in changes)
+            return (f"origen {host} ({ip}) no es habitual (autorizados: ENG-WS01, WMS01), pero lo cubre {ids}: "
+                    f"verificar que la hora, el origen y el destino están dentro de su ventana y alcance; {n} conexiones hacia OT en ±24 h",
+                    False, r, len(r))
+        return (f"origen {host} ({ip}) NO está entre los autorizados (ENG-WS01, WMS01) y ningún cambio aprobado lo cubre; "
+                f"{n} conexiones hacia OT en ±24 h", True, r, len(r))
     c.add("RB-08.trafico", "RB-08.1-2 ¿Origen autorizado? Tráfico hacia OT (Modbus 502, EtherNet/IP 44818)", trafico)
 
     def previa():
