@@ -272,6 +272,7 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
     seen = render_pack(pack)
     from_fp_cache = False
 
+    llm_error = False
     try:
         if can_use_fp and fp_cache.exists():
             out = LLMTriage.model_validate_json(fp_cache.read_text(encoding="utf-8"))
@@ -287,6 +288,7 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
                 fp_cache.parent.mkdir(parents=True, exist_ok=True)
                 fp_cache.write_text(out.model_dump_json(indent=2), encoding="utf-8")
     except Exception as e:  # noqa: BLE001  — el sistema nunca se cae: deja la alerta a la persona
+        llm_error = True      # no se guarda en caché: la próxima vez se reintenta
         out = LLMTriage(title=f"{pack.alert['rule_name']} {NO_TRIAGE}", verdict="needs_more_info", confidence=0.0,
                         summary=f"El agente no pudo completar el triaje: {str(e)[:200]}. Requiere revisión humana.",
                         evidence=[Evidence(source="siem", event_id=alert_id, finding=pack.alert.get("description", ""))],
@@ -312,8 +314,9 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
                    + (f" · {len(ticket.policy_notes)} corrección(es)" if ticket.policy_notes else ""), ts=_now()))
     ticket.trace = trace
     ticket.triage_seconds = round(time.time() - started, 1)
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text(ticket.model_dump_json(indent=2), encoding="utf-8")
+    if not llm_error:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(ticket.model_dump_json(indent=2), encoding="utf-8")
     return ticket
 
 
@@ -388,7 +391,10 @@ if __name__ == "__main__":
         lim = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else None
         batch_dev(deep="--deep" in sys.argv, force="--force" in sys.argv, limit=lim)
     else:
-        aid = sys.argv[1] if len(sys.argv) > 1 else "ALR-20261009-011793"
-        tk = triage_alert(aid, deep="--deep" in sys.argv, use_cache=False,
-                          on_step=lambda s: print(f"  {s.step:>2} [{s.kind:9}] {s.tool:22} {s.ms:>5} ms  {s.result_summary[:100]}"))
-        print(json.dumps(tk.model_dump(exclude={"trace"}), ensure_ascii=False, indent=2))
+        aids = [a for a in sys.argv[1:] if not a.startswith("--")] or ["ALR-20261009-011793"]
+        for aid in aids:
+            if len(aids) > 1:
+                print(f"=== {aid} ===", flush=True)
+            tk = triage_alert(aid, deep="--deep" in sys.argv, use_cache=False,
+                              on_step=lambda s: print(f"  {s.step:>2} [{s.kind:9}] {s.tool:22} {s.ms:>5} ms  {s.result_summary[:100]}", flush=True))
+            print(json.dumps(tk.model_dump(exclude={"trace"}), ensure_ascii=False, indent=2), flush=True)

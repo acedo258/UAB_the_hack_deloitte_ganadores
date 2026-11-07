@@ -9,6 +9,7 @@ export const api = {
   stats: () => fetch('/api/stats').then(j),
   queue: (p = {}) => fetch('/api/queue?' + new URLSearchParams(p)).then(j),
   alert: (id) => fetch(`/api/alerts/${id}`).then(j),
+  pack: (id) => fetch(`/api/packs/${id}`).then(j),
   ticket: (id) => fetch(`/api/tickets/${id}`).then((r) => (r.status === 404 ? null : j(r))),
   event: (id) => fetch(`/api/events/${id}`).then(j),
   patterns: (min = 1) => fetch(`/api/patterns?min_count=${min}`).then(j),

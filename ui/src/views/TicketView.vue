@@ -79,6 +79,43 @@
                 <pre class="mono raw">{{ JSON.stringify({ entities: alert.entities, evidence: alert.evidence }, null, 2) }}</pre>
               </n-collapse-item>
             </n-collapse>
+
+            <!-- Comprobaciones del Runbook y Línea Base (pack.checks) -->
+            <template v-if="sortedChecks.length">
+              <n-divider style="margin: 14px 0 8px 0;" title-placement="left">Comprobaciones del Runbook ({{ sortedChecks.length }})</n-divider>
+              <div class="checks-list">
+                <div
+                  v-for="ch in sortedChecks"
+                  :key="ch.id"
+                  :class="['check-item', ch.attention ? 'check-attention' : '']"
+                >
+                  <div class="check-q">
+                    <n-tag size="tiny" :type="ch.attention ? 'warning' : 'default'" :bordered="false" class="mono">
+                      {{ ch.id }}
+                    </n-tag>
+                    <span>{{ ch.question }}</span>
+                  </div>
+                  <div class="check-a">
+                    <strong v-if="ch.attention" style="color: #b45309;">⚠ </strong>{{ ch.answer }}
+                  </div>
+                  <div v-if="ch.events?.length" class="check-events">
+                    <n-button
+                      v-for="(ev, eidx) in ch.events"
+                      :key="eidx"
+                      v-show="ev.event_id"
+                      size="tiny"
+                      secondary
+                      type="warning"
+                      class="mono"
+                      style="margin: 2px 4px 2px 0;"
+                      @click="openEvent(ev.event_id)"
+                    >
+                      🔎 {{ ev.event_id }}
+                    </n-button>
+                  </div>
+                </div>
+              </div>
+            </template>
           </template>
         </n-card>
       </n-gi>
@@ -99,10 +136,22 @@
               v-for="s in steps"
               :key="s.step"
               :type="stepType(s)"
-              :title="`${s.tool}`"
-              :content="s.result_summary"
               :time="s.ms ? `${s.ms} ms` : ''"
-            />
+            >
+              <template #header>
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                  <n-tag v-if="s.tool?.startsWith('recipe.')" size="tiny" type="warning" :bordered="false">Runbook</n-tag>
+                  <n-tag v-else-if="s.tool?.startsWith('baseline.')" size="tiny" type="default" :bordered="false">¿Es lo normal?</n-tag>
+                  <span class="mono" style="font-size: 12px; font-weight: 600;">{{ s.tool }}</span>
+                </div>
+                <div v-if="s.input?.pregunta" style="font-size: 11px; color: #475569; font-weight: 400; margin-top: 2px;">
+                  {{ s.input.pregunta }}
+                </div>
+              </template>
+              <div :class="['trace-summary', s.result_summary?.startsWith('⚠ ') ? 'trace-warn-box' : '']">
+                {{ s.result_summary }}
+              </div>
+            </n-timeline-item>
           </n-timeline>
         </n-card>
       </n-gi>
@@ -252,7 +301,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   NAlert, NButton, NCard, NCollapse, NCollapseItem, NDivider, NEmpty, NGi, NGrid, NInput,
   NModal, NSelect, NSpace, NTag, NTimeline, NTimelineItem, useMessage
@@ -261,13 +310,19 @@ import { api, SEV_TYPE, VERDICT_LABEL } from '../api'
 
 const props = defineProps({ id: String })
 const msg = useMessage()
-const alert = ref(null), ticket = ref(null), steps = ref([]), running = ref(false)
+const alert = ref(null), pack = ref(null), ticket = ref(null), steps = ref([]), running = ref(false)
 const analyst = ref(''), correction = ref(null), showEvent = ref(false), eventData = ref(null)
 const verdictOptions = Object.entries(VERDICT_LABEL).map(([value, label]) => ({ value, label }))
 const CONTAINMENT = ['isolate_host', 'disable_user', 'revoke_sessions', 'reset_password', 'block_ioc', 'purge_email', 'disable_access_key']
 
+const sortedChecks = computed(() => {
+  const list = pack.value?.checks || []
+  return [...list].sort((a, b) => Number(Boolean(b.attention)) - Number(Boolean(a.attention)))
+})
+
 onMounted(async () => {
   alert.value = await api.alert(props.id)
+  pack.value = await api.pack(props.id).catch(() => null)
   ticket.value = await api.ticket(props.id)
   steps.value = ticket.value?.trace || []
 })
@@ -285,11 +340,14 @@ function run(deep) {
   })
 }
 
-const stepType = (s) => ({
-  guardrail: s.result_summary?.startsWith('⚠') ? 'error' : 'success',
-  llm: 'info',
-  policy: 'warning'
-}[s.kind] || 'default')
+const stepType = (s) => {
+  if (s.result_summary?.startsWith('⚠')) return 'warning'
+  return ({
+    guardrail: 'success',
+    llm: 'info',
+    policy: 'warning'
+  }[s.kind] || 'default')
+}
 
 async function openEvent(id) {
   try {
@@ -476,5 +534,50 @@ async function execute(a) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.checks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.check-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.check-attention {
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  border-left: 4px solid #d97706;
+}
+.check-q {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 4px;
+}
+.check-a {
+  color: #1e293b;
+  line-height: 1.4;
+}
+.check-events {
+  margin-top: 6px;
+}
+.trace-summary {
+  font-size: 12px;
+  color: #334155;
+  margin-top: 2px;
+}
+.trace-warn-box {
+  background: #fef3c7;
+  color: #92400e;
+  border-left: 3px solid #d97706;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
 }
 </style>

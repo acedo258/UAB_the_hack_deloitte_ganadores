@@ -25,11 +25,12 @@ def main(path: Path, use_cache: bool = True) -> None:
     gold = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
     res = Counter()
     fails = []
-    for g in gold:
+    for idx, g in enumerate(gold, 1):
         t = triage_alert(g["alert_id"], use_cache=use_cache)
         ok_v = t.verdict == g["verdict"]
         d_sev = abs(SEV.index(t.severity) - SEV.index(g["severity"]))
         ok_e = t.escalation.escalate == g["escalate"]
+        print(f"[{idx:2}/{len(gold)}] {g['alert_id']} -> {t.verdict}/{t.severity}/{t.escalation.escalate} (esperado: {g['verdict']}/{g['severity']}/{g['escalate']})", flush=True)
         res["verdict"] += ok_v
         res["sev_exact"] += d_sev == 0
         res["sev_pm1"] += d_sev <= 1

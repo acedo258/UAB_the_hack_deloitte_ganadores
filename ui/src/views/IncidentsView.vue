@@ -46,6 +46,24 @@
               />
             </n-timeline>
 
+            <n-divider title-placement="left" style="margin: 20px 0 12px 0;">Por qué se unió</n-divider>
+            <div v-if="currentIncident.links?.length" style="margin-bottom: 14px;">
+              <div
+                v-for="(lk, lidx) in currentIncident.links"
+                :key="lidx"
+                style="padding: 6px 10px; margin-bottom: 6px; background: #f8fafc; border-left: 3px solid #0284c7; border-radius: 4px; font-size: 12px;"
+              >
+                <div>
+                  <n-tag size="tiny" type="info" :bordered="false" style="margin-right: 6px;">{{ lk.type }}</n-tag>
+                  <b class="mono">{{ lk.entity }}</b>
+                  <span style="color: #64748b; margin-left: 6px;">({{ lk.alerts?.length || 0 }} alertas)</span>
+                </div>
+                <div v-if="lk.from?.length" style="color: #475569; margin-top: 2px; font-size: 11px;">
+                  Origen: {{ lk.from.join(' · ') }}
+                </div>
+              </div>
+            </div>
+
             <n-divider title-placement="left" style="margin: 20px 0 12px 0;">Alertas correlacionadas</n-divider>
             <n-space :size="6" style="flex-wrap: wrap;">
               <n-button
