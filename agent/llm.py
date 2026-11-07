@@ -120,8 +120,13 @@ def chat(messages: list[dict], tools: list[dict] | None = None, json_mode: bool 
                 )
                 tcs.append(tc_obj)
             return SimpleNamespace(content=data["message"].get("content", ""), tool_calls=tcs or None), tokens
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            # Solo se cae al endpoint /v1 si /api/chat no existe. Antes cualquier fallo (un timeout, por ejemplo)
+            # repetía la petición por /v1 sin num_ctx ni think=False: la alerta tardaba el doble o el triple y
+            # acababa igualmente "sin triaje automático".
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if not (isinstance(e, ImportError) or status == 404):
+                raise
 
     kwargs: dict[str, Any] = {"model": model, "messages": msgs, "temperature": temperature}
     if tools:

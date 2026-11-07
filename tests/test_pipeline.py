@@ -168,3 +168,24 @@ def test_deep_mode_with_tools(monkeypatch):
     tk = triage.triage_alert("ALR-20261009-011793", deep=True, use_cache=False, use_fp_cache=False, on_step=steps.append)
     assert tk.verdict == "true_positive"
     assert any(s.tool == "get_user" and s.kind == "tool" for s in steps)
+
+
+def test_shrink_result_json_valido_y_corto():
+    import json as _json
+    from agent.triage import shrink_result
+    big = {"events": [{"event_id": f"EDR-{i:07d}", "cmd": "powershell -enc " + "A" * 900} for i in range(80)], "total": 80}
+    s = shrink_result(big, 2500)
+    assert len(s) <= 2500
+    data = _json.loads(s)                       # sigue siendo JSON válido (antes se cortaba a lo bruto)
+    assert data["total"] == 80 and data["events"][0]["event_id"] == "EDR-0000000"
+    assert shrink_result({"ok": 1}, 2500) == '{"ok": 1}'
+
+
+def test_cited_ids_missing():
+    from agent.triage import cited_ids_missing
+    from core.schemas import Evidence, LLMTriage
+    out = LLMTriage(title="t", verdict="true_positive", confidence=0.9, summary="s",
+                    evidence=[Evidence(source="edr", event_id="EDR-0000001", finding="x"),
+                              Evidence(source="edr", event_id="EDR-9999999", finding="inventado"),
+                              Evidence(source="intel", finding="sin id")])
+    assert cited_ids_missing(out, '{"timeline": ["EDR-0000001"]}') == ["EDR-9999999"]
