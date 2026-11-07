@@ -9,7 +9,7 @@
             <span class="sub">Triaje con IA</span>
           </div>
 
-          <!-- Navegación con pestañas completas y legibles -->
+          <!-- Navegación optimizada en anchura -->
           <nav class="nav-links">
             <button
               v-for="item in menu"
@@ -23,7 +23,7 @@
             </button>
           </nav>
 
-          <!-- Embudo de reducción y ahorro -->
+          <!-- Embudo de reducción y tiempo ahorrado siempre visible -->
           <div v-if="stats.data" class="funnel">
             <span class="funnel-pill"><b>{{ fmt(stats.data.alerts) }}</b> alertas</span>
             <span class="arrow">→</span>
@@ -32,7 +32,7 @@
             <span class="funnel-pill outlier-pill"><b>{{ stats.data.outliers }}</b> atípicos</span>
             <span class="arrow">→</span>
             <span class="funnel-pill-success">
-              ⏱️ <b>{{ Math.round((stats.data.minutes_saved || (stats.data.triaged * 15)) / 60) }}h</b> ahorradas
+              ⏱️ <b>{{ savedTimeText }}</b> ahorradas
             </span>
           </div>
 
@@ -44,7 +44,7 @@
             class="demo-btn"
             @click="triggerDemoMode"
           >
-            ▶️ Modo Demo
+            ▶️ Demo
           </n-button>
         </n-layout-header>
 
@@ -57,7 +57,7 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NConfigProvider, NLayout, NLayoutContent, NLayoutHeader, NMessageProvider } from 'naive-ui'
 import { useStats } from './stores/stats'
@@ -69,17 +69,27 @@ const route = useRoute()
 onMounted(() => stats.load())
 const fmt = (n) => n?.toLocaleString('es-ES') || '0'
 
+// Nombres concisos para evitar desbordamiento horizontal en cualquier resolución
 const menu = [
-  { label: 'Cola de Alertas', key: '/', icon: '📥' },
-  { label: 'Patrones en Bloque', key: '/patrones', icon: '🔁' },
-  { label: 'Incidentes & Kill Chain', key: '/incidentes', icon: '⛓️' },
-  { label: 'Registro de Auditoría', key: '/auditoria', icon: '📋' },
+  { label: 'Cola', key: '/', icon: '📥' },
+  { label: 'Patrones', key: '/patrones', icon: '🔁' },
+  { label: 'Incidentes', key: '/incidentes', icon: '⛓️' },
+  { label: 'Auditoría', key: '/auditoria', icon: '📋' },
 ]
 
 function isNavActive(key) {
   if (key === '/') return route.path === '/' || route.path.startsWith('/alerta/')
   return route.path.startsWith(key)
 }
+
+const savedTimeText = computed(() => {
+  if (!stats.data) return '0h'
+  const mins = stats.data.minutes_saved || (stats.data.triaged * 15) || 60
+  if (mins >= 60) {
+    return `${Math.round(mins / 60)}h`
+  }
+  return `${mins}m`
+})
 
 function triggerDemoMode() {
   router.push('/alerta/ALR-20261020-011911')
@@ -105,29 +115,32 @@ body {
 .header {
   display: flex;
   align-items: center;
-  padding: 0 20px;
-  height: 60px;
+  padding: 0 16px;
+  height: 58px;
   background: #ffffff;
   border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 .brand {
   font-weight: 700;
   white-space: nowrap;
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 .brand-title {
   color: #0F6E56;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 800;
 }
 .brand .sub {
   font-weight: 500;
   color: #64748b;
   margin-left: 6px;
-  font-size: 12px;
+  font-size: 11px;
   background: #f1f5f9;
-  padding: 2px 6px;
+  padding: 2px 5px;
   border-radius: 4px;
 }
 
@@ -135,21 +148,22 @@ body {
 .nav-links {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-left: 20px;
+  gap: 4px;
+  margin-left: 14px;
+  flex-shrink: 0;
 }
 .nav-btn {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 13px;
+  padding: 5px 9px;
+  font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
   color: #475569;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   transition: all 0.15s ease-in-out;
   white-space: nowrap;
 }
@@ -165,7 +179,7 @@ body {
   border-color: #a7f3d0;
 }
 .nav-icon {
-  font-size: 14px;
+  font-size: 13px;
 }
 
 /* Embudo de reducción */
@@ -173,15 +187,17 @@ body {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 5px;
+  font-size: 11.5px;
   color: #475569;
   white-space: nowrap;
+  flex-shrink: 0;
+  padding: 0 8px;
 }
 .funnel-pill {
   background: #f1f5f9;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 3px 6px;
+  border-radius: 5px;
 }
 .outlier-pill {
   background: #fef3c7;
@@ -191,17 +207,19 @@ body {
 .funnel-pill-success {
   background: #ecfdf5;
   color: #065f46;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 3px 7px;
+  border-radius: 5px;
   border: 1px solid #a7f3d0;
+  font-weight: 600;
 }
 .funnel .arrow {
   color: #94a3b8;
-  font-size: 11px;
+  font-size: 10px;
 }
 .demo-btn {
-  margin-left: 14px;
+  margin-left: 8px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
