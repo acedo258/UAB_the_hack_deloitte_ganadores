@@ -188,19 +188,22 @@ def _seen_text(msgs: list[dict]) -> str:
     return "\n".join(m.get("content") or "" for m in msgs if m.get("role") in ("system", "user", "tool"))
 
 
-def _final_json(msgs: list[dict], first_text: str | None, emit: OnStep, tokens: int, t0: float, label: str) -> LLMTriage:
+def _final_json(msgs: list[dict], first_text: str | None, emit: OnStep, tokens: int, t0: float, label: str,
+                timings: dict | None = None) -> LLMTriage:
     """Valida el JSON final; si no vale, lo pide corregido una vez. Mismo comportamiento en modo rápido e investigador."""
     text, t = first_text, t0
+    timings = timings or {}
     for attempt in range(2):
         if text is None:
             t = time.time()
             msg, tokens = llm.chat(msgs)
             text = msg.content or ""
+            timings = getattr(msg, "timings", None) or {}
         try:
             out = _parse(text)
             est = llm.estimate_tokens(msgs)
             emit(TraceStep(step=0, kind="llm", tool=f"{label} ({_model()})",
-                           input={"intento": attempt + 1, "tokens_estimados": est, "num_ctx": llm.num_ctx()},
+                           input={"intento": attempt + 1, "tokens_estimados": est, "num_ctx": llm.num_ctx(), **timings},
                            result_summary=("⚠ el contexto puede no caber en la ventana del modelo · " if est > llm.num_ctx() else "")
                            + f"{out.verdict} · conf {out.confidence:.2f} · {tokens} tokens", ms=int((time.time() - t) * 1000), ts=_now()))
             return out
@@ -236,7 +239,8 @@ def _llm_deep(pack: ContextPack, tb: ToolBox, emit: OnStep) -> tuple[LLMTriage, 
         t = time.time()
         msg, tokens = llm.chat(msgs, tools=TOOL_SPECS)
         if not getattr(msg, "tool_calls", None):
-            return _final_json(msgs, msg.content or "", emit, tokens, t, "llm.triage.deep"), _seen_text(msgs)
+            return _final_json(msgs, msg.content or "", emit, tokens, t, "llm.triage.deep",
+                               getattr(msg, "timings", None)), _seen_text(msgs)
         msgs.append({"role": "assistant", "content": msg.content or "",
                      "tool_calls": [tc.model_dump() for tc in msg.tool_calls]})
         for tc in msg.tool_calls:
@@ -369,6 +373,10 @@ def batch_summary(rows_: list[dict]) -> dict:
         "tiempo_medio_s_todas": round(total / n, 1) if n else 0,
         "tiempo_medio_s_con_llm": round(mean_llm, 1),
         "estimacion_10_alertas_nuevas_min": round(10 * mean_llm / 60, 1),
+        "ollama_medias (solo alertas con llamada)": {
+            k: round(sum(r["ollama"][k] for r in timed) / len(timed), 1)
+            for k in ("leer_prompt_s", "escribir_s", "cargar_modelo_s", "tokens_prompt", "tokens_salida")
+        } if (timed := [r for r in rows_ if len(r.get("ollama") or {}) == 5]) else {},
     }
 
 
@@ -386,11 +394,14 @@ def batch_dev(deep: bool = False, force: bool = False, limit: int | None = None)
             (s.tool for s in tk.trace if s.kind == "llm" and not s.tool.startswith("llm.ventana")
              and "salida inválida" not in s.result_summary), "desconocido")
         missing = next((s.input.get("citados_no_en_contexto", []) for s in tk.trace if s.tool == "guardrail.evidence_ids"), [])
+        llm_in = next((s.input for s in tk.trace if s.kind == "llm" and "leer_prompt_s" in (s.input or {})), {}) if not cached else {}
         out_rows.append({
             "alert_id": aid, "verdict": tk.verdict, "severity": tk.severity, "seconds": dt, "source": src,
             "no_triage": NO_TRIAGE in tk.title or any(s.tool == "llm.error" for s in tk.trace),
             "ctx_warning": any("⚠ el contexto" in s.result_summary for s in tk.trace),
             "missing_ids": missing, "manipulation": tk.manipulation_attempt, "open_questions": tk.open_questions,
+            "ollama": {k: llm_in[k] for k in ("leer_prompt_s", "escribir_s", "cargar_modelo_s", "tokens_prompt", "tokens_salida")
+                       if k in llm_in},
         })
         print(f"[{i:3}/{len(dev_alerts)}] {aid} ({dt:5.1f}s, {src[:24]:24}) -> {tk.verdict:20} | {tk.severity:13} "
               f"| manip={tk.manipulation_attempt}" + (f" | ⚠ ids {missing}" if missing else ""))

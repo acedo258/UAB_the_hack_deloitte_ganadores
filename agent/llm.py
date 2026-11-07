@@ -95,7 +95,10 @@ def chat(messages: list[dict], tools: list[dict] | None = None, json_mode: bool 
                 "messages": ollama_msgs,
                 "stream": False,
                 "think": False,
-                "options": {"temperature": temperature, "num_ctx": num_ctx()},
+                "options": {"temperature": temperature, "num_ctx": num_ctx(), "num_predict": ANSWER_TOKENS},
+                # Mantener el modelo cargado: si pasan más de 5 min entre alertas (el domingo), Ollama lo descarga
+                # y la siguiente alerta paga la recarga.
+                "keep_alive": os.getenv("LLM_KEEP_ALIVE", "30m"),
             }
             if tools:
                 payload["tools"] = tools
@@ -119,7 +122,13 @@ def chat(messages: list[dict], tools: list[dict] | None = None, json_mode: bool 
                     },
                 )
                 tcs.append(tc_obj)
-            return SimpleNamespace(content=data["message"].get("content", ""), tool_calls=tcs or None), tokens
+            ns = 1e9   # Ollama da las duraciones en nanosegundos
+            timings = {"leer_prompt_s": round((data.get("prompt_eval_duration") or 0) / ns, 1),
+                       "escribir_s": round((data.get("eval_duration") or 0) / ns, 1),
+                       "cargar_modelo_s": round((data.get("load_duration") or 0) / ns, 1),
+                       "tokens_prompt": data.get("prompt_eval_count") or 0, "tokens_salida": data.get("eval_count") or 0}
+            return SimpleNamespace(content=data["message"].get("content", ""), tool_calls=tcs or None,
+                                   timings=timings), tokens
         except Exception as e:  # noqa: BLE001
             # Solo se cae al endpoint /v1 si /api/chat no existe. Antes cualquier fallo (un timeout, por ejemplo)
             # repetía la petición por /v1 sin num_ctx ni think=False: la alerta tardaba el doble o el triple y
