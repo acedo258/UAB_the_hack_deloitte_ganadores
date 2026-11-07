@@ -211,8 +211,78 @@ def build(verbose: bool = True) -> None:
     con.execute("CREATE INDEX ix_ee ON entity_events(entity)")
     con.execute("CREATE INDEX ix_ae ON alert_entities(entity)")
     n = con.execute("SELECT count(*) FROM entity_events").fetchone()[0]
-    log(f"entity_events: {n:,} filas. Listo: {DB_PATH}")
+    log(f"entity_events: {n:,} filas")
+
+    # --- hubs: entidades compartidas por tanta gente que no relacionan nada
+    build_hubs(con)
+    h = con.execute("SELECT kind, count(*) FROM hub_entities GROUP BY 1 ORDER BY 1").fetchall()
+    log(f"hub_entities: {', '.join(f'{k} {v}' for k, v in h)}. Listo: {DB_PATH}")
     con.close()
+
+
+# ------------------------------------------------------------------ hubs
+# Umbrales sobre una empresa de ~1.200 empleados y ~1.200 equipos (ver docs de la parte A)
+HUB_SHARED = 20          # IP / equipo / cuenta / hash compartido por >= 20 usuarios o equipos distintos
+HUB_DOMAIN_HOSTS = 50    # dominio que visitan >= 50 equipos (~4 % de la red)
+HUB_ALERTS = 30          # entidad en >= 30 alertas...
+OWN_DOMAIN = "tarvia.example"
+
+
+def build_hubs(con) -> None:
+    """Crea hub_entities(entity, etype, kind, spread, reason).
+
+    kind = 'hub'      -> no relaciona nada: se excluye de la línea temporal, de "otras alertas" y de la correlación.
+    kind = 'campaign' -> muchas alertas de UNA sola regla (misma campaña o mismo ruido): lo agrupa fingerprint.py;
+                         la correlación no debería usarla para unir incidentes distintos.
+    El reparto se mide por co-aparición en el mismo evento: (source, event_id) compartido en entity_events."""
+    con.execute("DROP TABLE IF EXISTS hub_entities")
+    con.execute("CREATE TABLE hub_entities(entity VARCHAR, etype VARCHAR, kind VARCHAR, spread BIGINT, reason VARCHAR)")
+
+    def spread(a: str, b: str, threshold: int, reason: str) -> None:
+        con.execute(f"""INSERT INTO hub_entities
+            SELECT x.entity, x.etype, 'hub', count(DISTINCT y.entity) n, '{reason}: ' || count(DISTINCT y.entity)
+            FROM entity_events x JOIN entity_events y ON x.source = y.source AND x.event_id = y.event_id AND y.etype = '{b}'
+            WHERE x.etype = '{a}' AND x.entity <> y.entity GROUP BY 1, 2 HAVING count(DISTINCT y.entity) >= {threshold}""")
+
+    spread("ip", "user", HUB_SHARED, "IP compartida por usuarios distintos")
+    spread("host", "user", HUB_SHARED, "equipo compartido por usuarios distintos")
+    spread("user", "host", HUB_SHARED, "cuenta usada en equipos distintos")
+    spread("hash", "host", HUB_SHARED, "hash visto en equipos distintos")
+    spread("domain", "host", HUB_DOMAIN_HOSTS, "dominio visitado por equipos distintos")
+    # Dominio propio: tarvia.example y todos sus subdominios
+    con.execute(f"""INSERT INTO hub_entities SELECT DISTINCT entity, 'domain', 'hub', NULL, 'dominio propio de la empresa'
+                    FROM (SELECT entity FROM entity_events WHERE etype = 'domain' UNION SELECT entity FROM alert_entities WHERE etype = 'domain')
+                    WHERE (entity = '{OWN_DOMAIN}' OR entity LIKE '%.{OWN_DOMAIN}')
+                    AND entity NOT IN (SELECT entity FROM hub_entities)""")
+    # Desde las alertas: muchas alertas y varias reglas = hub; muchas alertas de una sola regla = campaña
+    con.execute(f"""INSERT INTO hub_entities
+        SELECT e.entity, e.etype, CASE WHEN count(DISTINCT a.rule_id) >= 2 THEN 'hub' ELSE 'campaign' END,
+               count(DISTINCT e.alert_id),
+               CASE WHEN count(DISTINCT a.rule_id) >= 2 THEN 'en ' || count(DISTINCT e.alert_id) || ' alertas de ' || count(DISTINCT a.rule_id) || ' reglas'
+                    ELSE 'campaña o ruido repetido: ' || count(DISTINCT e.alert_id) || ' alertas de la regla ' || any_value(a.rule_id) END
+        FROM alert_entities e JOIN alerts a USING (alert_id)
+        WHERE e.entity NOT IN (SELECT entity FROM hub_entities)
+        GROUP BY 1, 2 HAVING count(DISTINCT e.alert_id) >= {HUB_ALERTS}""")
+    con.execute("CREATE INDEX ix_hub ON hub_entities(entity)")
+
+
+_HUBS: dict[str, dict] | None = None
+
+
+def hubs() -> dict[str, dict]:
+    """{entity: {etype, kind, reason}} cargado una vez por proceso. Vacío si la base es anterior al bloque 4."""
+    global _HUBS
+    if _HUBS is None:
+        try:
+            _HUBS = {r["entity"]: r for r in rows("SELECT entity, etype, kind, reason FROM hub_entities")}
+        except Exception:
+            _HUBS = {}
+    return _HUBS
+
+
+def is_hub(entity: str | None, include_campaigns: bool = False) -> bool:
+    h = hubs().get(entity or "")
+    return bool(h) and (include_campaigns or h["kind"] == "hub")
 
 
 def alert_entities(a: dict) -> list[tuple[str, str]]:

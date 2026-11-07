@@ -24,7 +24,7 @@ import re
 from datetime import datetime, timedelta
 
 from core.schemas import Check
-from core.store import norm_user, rows
+from core.store import is_hub, norm_user, rows
 from core.tools import ToolBox, _iso
 
 MIN_HISTORY = 5           # eventos previos mínimos para opinar
@@ -231,7 +231,7 @@ def run_baselines(a: dict, by_type: dict[str, list[str]], tb: ToolBox, users: li
                     SELECT src_ip, user_upn u, ts FROM idp_signins UNION ALL SELECT src_ip, "user", ts FROM vpn)
                  WHERE norm_user(u) = ? AND src_ip IN ({",".join("?" * len(ext_ips))}) AND ts BETWEEN ? AND ? LIMIT 2""",
                  [users[0]] + ext_ips + [(t - timedelta(days=1)).isoformat(), (t + timedelta(days=1)).isoformat()])] if users and ext_ips else []
-    domains = [d for d in by_type.get("domain", []) if not d.endswith("tarvia.example")][:2]
+    domains = [d for d in by_type.get("domain", []) if not is_hub(d)][:2]
     plan: list[tuple[str, tuple]] = []
     for u in users[:1]:
         for ip in login_ips:
@@ -243,7 +243,7 @@ def run_baselines(a: dict, by_type: dict[str, list[str]], tb: ToolBox, users: li
         for d in domains:
             plan.append(("host_domain", (h, d, ts)))
     # Ficheros antes que hashes: el hash del EDR suele ser el del intérprete, no el del script
-    for x in (by_type.get("file", []) + by_type.get("hash", []))[:2]:
+    for x in [x for x in by_type.get("file", []) + by_type.get("hash", []) if not is_hub(x)][:2]:
         plan.append(("prevalence", (x, ts)))
     cloud = (a.get("entities") or {}).get("cloud") or {}
     for k in (by_type.get("access_key", []) + ([cloud["identity"]] if cloud.get("identity") else []))[:1]:

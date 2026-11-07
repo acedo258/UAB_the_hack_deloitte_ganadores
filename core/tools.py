@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from core.schemas import TraceStep
-from core.store import norm_user, rows
+from core.store import hubs, is_hub, norm_user, rows
 
 PREFIX_SOURCE = {
     "ADE": "ad_events", "AIG": "ai_gateway", "CI": "cicd_builds", "CT": "cloudtrail", "DLP": "dlp", "DNS": "dns",
@@ -77,6 +77,8 @@ class ToolBox:
 
     def alerts_for_entity(self, entity: str, desde: str, hasta: str, exclude: str = "", limit: int = 15) -> list[dict]:
         def f():
+            if is_hub(_ent(entity)):   # una entidad compartida por cientos no relaciona alertas
+                return []
             return rows("""SELECT a.alert_id, a.created_at, a.rule_id, a.rule_name, a.severity
                 FROM alert_entities e JOIN alerts a USING(alert_id)
                 WHERE e.entity = ? AND a.created_at BETWEEN ? AND ? AND a.alert_id <> ?
@@ -145,10 +147,15 @@ class ToolBox:
                 r = rows(f"SELECT to_json(t) AS raw FROM {i['source']} t WHERE event_id = ?", [i["event_id"]])
                 if r:
                     events.append({"ts": i["ts"], "source": i["source"], "event_id": i["event_id"], "line": compact(r[0]["raw"])})
-            return {"entity": e, "counts": {c["source"]: c["n"] for c in counts}, "events": events,
-                    "truncated": sum(c["n"] for c in counts) > len(events)}
+            out = {"entity": e, "counts": {c["source"]: c["n"] for c in counts}, "events": events,
+                   "truncated": sum(c["n"] for c in counts) > len(events)}
+            h = hubs().get(e)
+            if h:   # avisamos al agente: compartir un hub no relaciona dos cosas
+                out["hub"] = f"{h['kind']}: {h['reason']}"
+            return out
         return self._run("entity_timeline", {"entity": entity, "desde": desde, "hasta": hasta}, f,
-                         lambda r: f"{sum(r['counts'].values())} eventos: " + ", ".join(f"{k} {v}" for k, v in r["counts"].items()) if r["counts"] else "sin actividad")
+                         lambda r: (f"[{r['hub']}] " if r.get("hub") else "") +
+                         (f"{sum(r['counts'].values())} eventos: " + ", ".join(f"{k} {v}" for k, v in r["counts"].items()) if r["counts"] else "sin actividad"))
 
     def search_logs(self, source: str, contains: str = "", desde: str = "", hasta: str = "", limit: int = 30) -> dict:
         """Búsqueda de texto en una fuente (como la API simulada, pero en milisegundos)."""
