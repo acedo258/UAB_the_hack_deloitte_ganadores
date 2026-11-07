@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable
 
 from core.schemas import Check
-from core.store import is_hub, norm_user, rows
+from core.store import OWN_DOMAIN, is_hub, norm_user, rows
 from core.tools import ToolBox, _iso
 
 MAX_EVENTS = 8
@@ -39,6 +39,7 @@ SUSPICIOUS_CMD = (r"vssadmin|shadowcopy|wbadmin|bcdedit|lsass|procdump|comsvcs|m
 COMPRESS_CMD = r"7z|7za|winrar|\brar\b|zip|compress-archive|tar\s|gpg|veracrypt|makecab"
 PERSISTENCE_OPS = ("New-InboxRule", "Consent to application", "Add-MfaMethod", "Set-MailboxAutoReply")
 CLOUD_SENSITIVE = r"^(GetCallerIdentity|List|Describe|Create|Attach|Put.*Policy|Delete(Trail|Bucket)|StopLogging|UpdateAssumeRole)"
+MIN_LOGIN_HISTORY = 5     # inicios de sesión previos necesarios para decir "origen nuevo"
 SECRET_RE = r"(AWS_[A-Z_]+|NPM_TOKEN|GITHUB_TOKEN|[A-Z_]*SECRET[A-Z_]*)"
 OT_PORTS = ("502", "44818")
 OT_AUTHORIZED = {"ENG-WS01", "WMS01"}
@@ -47,6 +48,26 @@ OT_AUTHORIZED = {"ENG-WS01", "WMS01"}
 # ------------------------------------------------------------------ utilidades
 def iso(t: datetime) -> str:
     return t.isoformat()
+
+
+_DATA_START: datetime | None = None
+
+
+def data_start() -> datetime:
+    """Primer evento de los logs: antes de esa fecha no hay historial con el que comparar."""
+    global _DATA_START
+    if _DATA_START is None:
+        _DATA_START = _iso(rows("SELECT min(ts) t FROM entity_events")[0]["t"])
+    return _DATA_START
+
+
+def near_start(t: datetime | str | None, days: float = 1) -> bool:
+    return t is not None and _iso(t) - data_start() < timedelta(days=days)
+
+
+def first_seen(t) -> str:
+    """'visto por primera vez' honesto: al inicio de los logs no significa que sea nuevo."""
+    return f"{t} (inicio de los logs: no indica que sea nuevo)" if near_start(t) else str(t)
 
 
 def _cut(v: Any) -> Any:
@@ -139,12 +160,16 @@ def rb01(c: Ctx) -> None:
         legit_n = rows("SELECT count(*) n FROM email WHERE lower(sender) LIKE ? AND ts < ?",
                        [f"%@{legit.lower()}", iso(base_t)])[0]["n"] if legit else None
         auth = msgs[0] if msgs else {}
-        txt = (f"{sender}: visto por primera vez {first['f']} ({first['n']} correos en total); "
-               f"{dom_prev} correos previos del dominio {dom}; SPF {auth.get('spf')}, DKIM {auth.get('dkim')}, DMARC {auth.get('dmarc')}")
+        internal = dom == OWN_DOMAIN or dom.endswith("." + OWN_DOMAIN)
+        bad_auth = any(str(auth.get(k, "")).lower() in ("fail", "softfail", "none") for k in ("spf", "dkim", "dmarc"))
+        txt = ((f"remitente INTERNO de la empresa ({sender}, dominio propio); " if internal else f"{sender}: ")
+               + f"visto por primera vez {first_seen(first['f'])} ({first['n']} correos en total); "
+               + f"{dom_prev} correos previos del dominio {dom}; SPF {auth.get('spf')}, DKIM {auth.get('dkim')}, DMARC {auth.get('dmarc')}")
         if legit:
             txt += f"; el proveedor legítimo ({legit}) tiene {legit_n} correos previos"
-        bad_auth = any(str(auth.get(k, "")).lower() in ("fail", "softfail", "none") for k in ("spf", "dkim", "dmarc"))
-        return txt, dom_prev == 0 or bad_auth or bool(legit and legit.lower() != dom), [], first["n"]
+        # "Dominio sin correos previos" no dice nada en el primer día de logs ni para el dominio propio
+        new_domain = dom_prev == 0 and not internal and not near_start(base_t)
+        return txt, new_domain or bad_auth or bool(legit and legit.lower() != dom), [], first["n"]
     c.add("RB-01.remitente", "RB-01.1 Remitente: antigüedad, suplantación y SPF/DKIM/DMARC", remitente)
 
     clicks = rows("SELECT * FROM email_clicks WHERE message_id = ? ORDER BY ts", [mid]) if mid else []
@@ -187,13 +212,18 @@ def rb01(c: Ctx) -> None:
         if not who:
             return "sin destinatarios", False, [], 0
         # Las IPs domésticas cambian: lo anómalo es un ASN o un país que el usuario no había usado nunca
-        r = rows(f"""SELECT s.*, NOT EXISTS (SELECT 1 FROM idp_signins p WHERE norm_user(p.user_upn) = norm_user(s.user_upn)
-                                                AND (p.asn = s.asn OR p.country = s.country) AND p.ts < ?) AS origen_nuevo
+        # Sin historial previo (p. ej. el primer día de logs) todo parecería nuevo: hacen falta >= MIN_LOGIN_HISTORY inicios
+        r = rows(f"""SELECT s.*,
+                       (SELECT count(*) FROM idp_signins p WHERE norm_user(p.user_upn) = norm_user(s.user_upn) AND p.ts < ?) AS previos,
+                       NOT EXISTS (SELECT 1 FROM idp_signins p WHERE norm_user(p.user_upn) = norm_user(s.user_upn)
+                                   AND (p.asn = s.asn OR p.country = s.country) AND p.ts < ?) AS origen_nuevo
                      FROM idp_signins s WHERE norm_user(s.user_upn) IN ({_in(who)}) AND s.ts BETWEEN ? AND ?
-                     ORDER BY origen_nuevo DESC, s.ts LIMIT 8""", [iso(base_t)] + who + [iso(base_t), iso(base_t + D)])
-        new = [x for x in r if x["origen_nuevo"] and x["result"] == "success"]
-        evs = [ev(x, ["user_upn", "result", "src_ip", "country", "asn", "mfa_result", "session_id", "origen_nuevo"]) for x in r]
-        return (f"{len(r)} inicios de sesión en las 24 h siguientes; {len(new)} correctos desde un ASN y país que el usuario no había usado nunca",
+                     ORDER BY origen_nuevo DESC, s.ts LIMIT 8""", [iso(base_t), iso(base_t)] + who + [iso(base_t), iso(base_t + D)])
+        new = [x for x in r if x["origen_nuevo"] and x["result"] == "success" and x["previos"] >= MIN_LOGIN_HISTORY]
+        no_hist = sorted({norm_user(x["user_upn"]) for x in r if x["previos"] < MIN_LOGIN_HISTORY})
+        evs = [ev(x, ["user_upn", "result", "src_ip", "country", "asn", "mfa_result", "session_id", "origen_nuevo", "previos"]) for x in r]
+        return (f"{len(r)} inicios de sesión en las 24 h siguientes; {len(new)} correctos desde un ASN y país que el usuario no había usado nunca"
+                + (f"; sin historial suficiente para comparar: {', '.join(no_hist)}" if no_hist else ""),
                 bool(new), evs, len(r))
     c.add("RB-01.logins", "RB-01.4 ¿Inicio de sesión anómalo del usuario después? (idp_signins, 24 h)", logins)
 
@@ -577,7 +607,7 @@ def rb09(c: Ctx) -> None:
                           SELECT upper(hostname) hostname, ts FROM proxy WHERE lower(domain) = ? UNION ALL
                           SELECT upper(hostname), ts FROM dns WHERE lower(query) = ? OR lower(query) LIKE ?)""", [d, d, f"%.{d}"])[0]
             top = rows("""SELECT upper(hostname) hostname, count(*) n FROM proxy WHERE lower(domain) = ? GROUP BY 1 ORDER BY 2 DESC LIMIT 5""", [d])
-            return (f"{d}: {r['equipos']} equipos lo contactan, {r['n']} peticiones, visto por primera vez {r['primero']}",
+            return (f"{d}: {r['equipos']} equipos lo contactan, {r['n']} peticiones, visto por primera vez {first_seen(r['primero'])}",
                     0 < (r["equipos"] or 0) <= 3, top, r["equipos"])
         c.add(f"RB-09.alcance.{d}", f"RB-09.1 ¿Cuántos equipos contactan {d} y desde cuándo?", alcance)
 
