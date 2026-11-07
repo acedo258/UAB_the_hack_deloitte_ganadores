@@ -44,7 +44,8 @@ class IntelResult(BaseModel):
 
 class ContextPack(BaseModel):
     alert: dict[str, Any]
-    runbook_id: str
+    entities: dict[str, Any] = {}                # entidades de la alerta
+    runbook_id: str = ""
     rule_info: dict[str, Any] = {}               # fila del catálogo de casos de uso
     local_time: str = ""                         # hora de España de la alerta
     assets: list[dict[str, Any]] = []            # CMDB de los hosts implicados (con vulnerabilidades)

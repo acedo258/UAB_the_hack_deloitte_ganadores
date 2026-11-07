@@ -46,6 +46,26 @@
     ],
     "runbook": "RB-01"
   },
+  "entities": {
+    "users": [
+      {
+        "upn": "lucia.castro@tarvia.example",
+        "display_name": "Lucía Castro"
+      }
+    ],
+    "hosts": [
+      {
+        "hostname": "WS-BCN-1053",
+        "ip": "10.10.1.64"
+      }
+    ],
+    "urls": [
+      "https://packaging-iberia-portal.example/facturas/FV-2026-10-8812?u=lucia.castro"
+    ],
+    "domains": [
+      "packaging-iberia-portal.example"
+    ]
+  },
   "runbook_id": "RB-01",
   "rule_info": {
     "rule_id": "UC-EML-003",

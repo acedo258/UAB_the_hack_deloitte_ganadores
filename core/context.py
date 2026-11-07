@@ -125,7 +125,7 @@ def build_pack(alert_id: str, alert: dict | None = None, tb: ToolBox | None = No
 
     untrusted = find_untrusted(a.get("evidence", {}), "alert.evidence") + find_untrusted(related, "related_events")
 
-    pack = ContextPack(alert=a, runbook_id=a.get("runbook", ""), rule_info=rule[0] if rule else {},
+    pack = ContextPack(alert=a, entities=a.get("entities", {}) or {}, runbook_id=a.get("runbook", ""), rule_info=rule[0] if rule else {},
                        local_time=local_time(a["created_at"]), assets=assets, users=users, matching_changes=changes,
                        intel=intel, related_events=related, timeline=timeline, other_alerts=other,
                        untrusted_fields=untrusted, notes=notes)

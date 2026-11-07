@@ -37,6 +37,20 @@
     ],
     "runbook": "RB-02"
   },
+  "entities": {
+    "hosts": [
+      {
+        "hostname": "WS-BCN-1174",
+        "ip": "10.10.1.185"
+      }
+    ],
+    "processes": [
+      {
+        "name": "powershell.exe",
+        "parent": "CcmExec.exe"
+      }
+    ]
+  },
   "runbook_id": "RB-02",
   "rule_info": {
     "rule_id": "UC-EDR-002",

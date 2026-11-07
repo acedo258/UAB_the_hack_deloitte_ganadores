@@ -35,6 +35,17 @@
     ],
     "runbook": "RB-09"
   },
+  "entities": {
+    "hosts": [
+      {
+        "hostname": "WS-BCN-1770",
+        "ip": "10.10.3.95"
+      }
+    ],
+    "ips": [
+      "107.174.115.43"
+    ]
+  },
   "runbook_id": "RB-09",
   "rule_info": {
     "rule_id": "UC-NET-002",
