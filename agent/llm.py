@@ -23,7 +23,7 @@ _client_cfg: tuple[str, str] | None = None
 
 
 def is_mock() -> bool:
-    return config.LLM_MODEL == "mock"
+    return os.getenv("LLM_MODEL", config.LLM_MODEL) == "mock"
 
 
 def client():
@@ -42,15 +42,10 @@ def _apply_no_think(messages: list[dict], model: str) -> list[dict]:
     if "qwen" not in model.lower():
         return messages
     out = [dict(m) for m in messages]
-    for m in out:
-        if m.get("role") == "system" and isinstance(m.get("content"), str):
-            if "/no_think" not in m["content"]:
-                m["content"] = "/no_think\n" + m["content"]
-            break
     for i in range(len(out) - 1, -1, -1):
         if out[i].get("role") == "user" and isinstance(out[i].get("content"), str):
             if "/no_think" not in out[i]["content"]:
-                out[i]["content"] = "/no_think\n" + out[i]["content"]
+                out[i]["content"] = out[i]["content"].rstrip() + " /no_think"
             break
     return out
 
@@ -60,9 +55,56 @@ def chat(messages: list[dict], tools: list[dict] | None = None, json_mode: bool 
     model = os.getenv("LLM_MODEL", config.LLM_MODEL)
     base_url = os.getenv("LLM_BASE_URL", config.LLM_BASE_URL)
     msgs = _apply_no_think(messages, model)
-    kwargs: dict[str, Any] = {"model": model, "messages": msgs, "temperature": temperature}
+    # Ollama local con Qwen3: usar /api/chat con think=False evita que /v1/chat/completions fuerce <think>
     if "11434" in base_url and "qwen" in model.lower():
-        kwargs["extra_body"] = {"think": False}
+        try:
+            import httpx
+            from types import SimpleNamespace
+            api_chat_url = base_url.replace("/v1", "").rstrip("/") + "/api/chat"
+            ollama_msgs = []
+            for m in msgs:
+                om = {"role": m["role"], "content": m.get("content") or ""}
+                if m.get("tool_calls"):
+                    om["tool_calls"] = [
+                        {"function": {"name": tc["function"]["name"],
+                                      "arguments": json.loads(tc["function"]["arguments"]) if isinstance(tc["function"]["arguments"], str) else tc["function"]["arguments"]}}
+                        for tc in m["tool_calls"]
+                    ]
+                ollama_msgs.append(om)
+            payload: dict[str, Any] = {
+                "model": model,
+                "messages": ollama_msgs,
+                "stream": False,
+                "think": False,
+                "options": {"temperature": temperature, "num_ctx": 8192},
+            }
+            if tools:
+                payload["tools"] = tools
+            elif json_mode:
+                payload["format"] = "json"
+            r = httpx.post(api_chat_url, json=payload, timeout=config.LLM_TIMEOUT_S)
+            r.raise_for_status()
+            data = r.json()
+            tokens = (data.get("prompt_eval_count") or 0) + (data.get("eval_count") or 0)
+            raw_tcs = data["message"].get("tool_calls") or []
+            tcs = []
+            for idx, tc in enumerate(raw_tcs):
+                fn = tc.get("function", {})
+                args_str = json.dumps(fn.get("arguments", {}), ensure_ascii=False)
+                tc_obj = SimpleNamespace(
+                    id=f"call_{idx}",
+                    type="function",
+                    function=SimpleNamespace(name=fn.get("name", ""), arguments=args_str),
+                    model_dump=lambda i=idx, n=fn.get("name", ""), a=args_str: {
+                        "id": f"call_{i}", "type": "function", "function": {"name": n, "arguments": a}
+                    },
+                )
+                tcs.append(tc_obj)
+            return SimpleNamespace(content=data["message"].get("content", ""), tool_calls=tcs or None), tokens
+        except Exception:  # noqa: BLE001
+            pass
+
+    kwargs: dict[str, Any] = {"model": model, "messages": msgs, "temperature": temperature}
     if tools:
         kwargs["tools"] = tools
     elif json_mode:

@@ -1,11 +1,11 @@
 {
-  "ticket_id": "TKT-20261005-000301-5c6e",
+  "ticket_id": "TKT-20261005-000301-b9f3",
   "alert_ids": [
     "ALR-20261005-000301"
   ],
-  "title": "PowerShell con comando codificado cubierto por CHG-2026-1031",
+  "title": "Ejecución de PowerShell codificado en el puesto de trabajo WS-BCN-1174 (SCCM legítimo)",
   "verdict": "benign_true_positive",
-  "confidence": 0.6,
+  "confidence": 0.95,
   "severity": "informational",
   "severity_rationale": "Regla medium × activo Media = medium; actividad autorizada → informational",
   "affected": {
@@ -18,12 +18,17 @@
     ],
     "customers": []
   },
-  "summary": "[MOCK] La actividad encaja con CHG-2026-1031: Script de inventario de software vía SCCM (PowerShell codificado).",
+  "summary": "La ejecución de PowerShell codificado en WS-BCN-1174 corresponde a un script de inventario de software aprobado por SCCM (CHG-2026-1031). El usuario sergi.rubio tiene permisos para ejecutar tareas SCCM y los accesos a servicios como GitHub y Slack son parte de su trabajo habitual. No hay actividad maliciosa ni violación de políticas.",
   "evidence": [
     {
-      "source": "calendario_cambios",
+      "source": "matching_changes",
       "event_id": "CHG-2026-1031",
-      "finding": "svc_sccm ejecuta -EncodedCommand diariamente 08:00-10:00"
+      "finding": "Script de inventario de software vía SCCM ejecutado diariamente 08:00-10:00 con permisos de Tecnología"
+    },
+    {
+      "source": "edr_events",
+      "event_id": "EDR-0005329",
+      "finding": "Comando decodificado: Get-CimInstance Win32_Product | ConvertTo-Json | Out-File C:\\Windows\\CCM\\Inventory\\sw.json (legítimo para SCCM)"
     }
   ],
   "enrichment": [],
@@ -36,7 +41,7 @@
       "target": "ticket",
       "requires_approval": false,
       "approver": "",
-      "justification": ""
+      "justification": "Acción por defecto según veredicto"
     }
   ],
   "executed_actions": [],
@@ -45,13 +50,15 @@
     "to": "",
     "reason": ""
   },
-  "open_questions": [],
-  "triage_seconds": 0.1,
+  "open_questions": [
+    "¿El acceso a GitHub por parte del usuario sergi.rubio es parte de su trabajo habitual?"
+  ],
+  "triage_seconds": 190.7,
   "manipulation_attempt": false,
   "manipulation_detail": "",
-  "llm_severity": null,
+  "llm_severity": "informational",
   "policy_notes": [],
-  "pattern_id": "",
+  "pattern_id": "UC-EDR-002:7d336606ee",
   "status": "proposed",
   "trace": [
     {
@@ -62,8 +69,8 @@
         "alert_id": "ALR-20261005-000301"
       },
       "result_summary": "UC-EDR-002 medium",
-      "ms": 26,
-      "ts": "2026-11-07T11:39:52.621756+00:00"
+      "ms": 0,
+      "ts": "2026-11-07T12:34:17.282260+00:00"
     },
     {
       "step": 2,
@@ -73,8 +80,8 @@
         "key": "WS-BCN-1174"
       },
       "result_summary": "WS-BCN-1174 criticidad Media (HQ-USERS, Puesto de trabajo)",
-      "ms": 4,
-      "ts": "2026-11-07T11:39:52.627898+00:00"
+      "ms": 1,
+      "ts": "2026-11-07T12:34:17.283883+00:00"
     },
     {
       "step": 3,
@@ -88,8 +95,8 @@
         "ts": "2026-10-05T07:56:30.000Z"
       },
       "result_summary": "CHG-2026-1031 (SCCM)",
-      "ms": 2,
-      "ts": "2026-11-07T11:39:52.630286+00:00"
+      "ms": 0,
+      "ts": "2026-11-07T12:34:17.284379+00:00"
     },
     {
       "step": 4,
@@ -101,8 +108,8 @@
         ]
       },
       "result_summary": "1/1 eventos encontrados",
-      "ms": 7,
-      "ts": "2026-11-07T11:39:52.637470+00:00"
+      "ms": 1,
+      "ts": "2026-11-07T12:34:17.286035+00:00"
     },
     {
       "step": 5,
@@ -114,8 +121,8 @@
         "hasta": "2026-10-06T07:56:30+00:00"
       },
       "result_summary": "30 eventos: proxy 11, dns 10, edr_events 9",
-      "ms": 73,
-      "ts": "2026-11-07T11:39:52.711342+00:00"
+      "ms": 37,
+      "ts": "2026-11-07T12:34:17.323896+00:00"
     },
     {
       "step": 6,
@@ -127,8 +134,8 @@
         "hasta": "2026-10-12T07:56:30+00:00"
       },
       "result_summary": "0 alertas",
-      "ms": 4,
-      "ts": "2026-11-07T11:39:52.715458+00:00"
+      "ms": 2,
+      "ts": "2026-11-07T12:34:17.326245+00:00"
     },
     {
       "step": 7,
@@ -139,16 +146,18 @@
       },
       "result_summary": "0 campos no fiables aislados, ninguno sospechoso",
       "ms": 0,
-      "ts": "2026-11-07T11:39:52.716396+00:00"
+      "ts": "2026-11-07T12:34:17.326865+00:00"
     },
     {
       "step": 8,
       "kind": "llm",
-      "tool": "llm.mock",
-      "input": {},
-      "result_summary": "benign_true_positive (heurística, sin LLM)",
-      "ms": 0,
-      "ts": "2026-11-07T11:39:52.716485+00:00"
+      "tool": "llm.triage (qwen3-soc)",
+      "input": {
+        "intento": 1
+      },
+      "result_summary": "benign_true_positive · conf 0.95 · 7007 tokens",
+      "ms": 190700,
+      "ts": "2026-11-07T12:37:28.029582+00:00"
     },
     {
       "step": 9,
@@ -159,7 +168,7 @@
       },
       "result_summary": "benign_true_positive · severidad informational · escalar False",
       "ms": 0,
-      "ts": "2026-11-07T11:39:52.716624+00:00"
+      "ts": "2026-11-07T12:37:28.029744+00:00"
     }
   ]
 }

@@ -9,6 +9,7 @@ on_step(TraceStep) permite a la API emitir cada paso en directo a la consola.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -18,8 +19,10 @@ from typing import Callable
 from pydantic import ValidationError
 
 from agent import llm
-from core.config import CACHE_DIR, DATA_DIR, LLM_MODEL
+from core import config
+from core.config import CACHE_DIR, DATA_DIR
 from core.context import build_pack
+from core.fingerprint import compute_patterns, fingerprint
 from core.policy import apply_policy
 from core.schemas import ContextPack, Evidence, LLMTriage, RecommendedAction, Ticket, TraceStep
 from core.tools import TOOL_SPECS, ToolBox
@@ -28,6 +31,17 @@ PROMPTS = Path(__file__).parent / "prompts"
 RUNBOOKS = DATA_DIR / "01_contexto" / "runbooks"
 MAX_TOOL_STEPS = 6
 OnStep = Callable[[TraceStep], None]
+_outliers: set[str] | None = None
+
+
+def _is_outlier_fp(fp: str) -> bool:
+    global _outliers
+    if _outliers is None:
+        try:
+            _outliers = {p["pattern_id"] for p in compute_patterns() if p["is_outlier"]}
+        except Exception:  # noqa: BLE001
+            _outliers = set()
+    return fp in _outliers
 
 
 def _now() -> str:
@@ -95,7 +109,7 @@ def _llm_fast(pack: ContextPack, emit: OnStep) -> LLMTriage:
         msg, tokens = llm.chat(msgs)
         try:
             out = _parse(msg.content)
-            emit(TraceStep(step=0, kind="llm", tool=f"llm.triage ({LLM_MODEL})", input={"intento": attempt + 1},
+            emit(TraceStep(step=0, kind="llm", tool=f"llm.triage ({os.getenv('LLM_MODEL', config.LLM_MODEL)})", input={"intento": attempt + 1},
                            result_summary=f"{out.verdict} · conf {out.confidence:.2f} · {tokens} tokens", ms=int((time.time() - t) * 1000), ts=_now()))
             return out
         except (ValueError, ValidationError) as e:
@@ -136,7 +150,7 @@ def _llm_deep(pack: ContextPack, tb: ToolBox, emit: OnStep) -> LLMTriage:
 
 
 def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = None, alert: dict | None = None,
-                 use_cache: bool = True) -> Ticket:
+                 use_cache: bool = True, use_fp_cache: bool = True) -> Ticket:
     started = time.time()
     cache = CACHE_DIR / "tickets" / f"{alert_id}{'.deep' if deep else ''}.json"
     if use_cache and cache.exists():
@@ -159,12 +173,24 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
                    result_summary=(f"⚠ {len(sus)} texto(s) intentan dar instrucciones: " + "; ".join(u.path for u in sus)) if sus
                    else f"{len(pack.untrusted_fields)} campos no fiables aislados, ninguno sospechoso", ts=_now()))
 
+    fp = fingerprint(pack.alert)
+    fp_safe_name = fp.replace(":", "_")
+    fp_cache = CACHE_DIR / "fingerprints" / f"{fp_safe_name}{'.deep' if deep else ''}.json"
+    can_use_fp = use_fp_cache and not sus and not _is_outlier_fp(fp)
+
     try:
-        if llm.is_mock():
+        if can_use_fp and fp_cache.exists():
+            out = LLMTriage.model_validate_json(fp_cache.read_text(encoding="utf-8"))
+            emit(TraceStep(step=0, kind="llm", tool="llm.cache_fingerprint", input={"pattern_id": fp},
+                           result_summary=f"{out.verdict} · conf {out.confidence:.2f} (reutilizado de huella {fp})", ts=_now()))
+        elif llm.is_mock():
             out = _mock_triage(pack)
             emit(TraceStep(step=0, kind="llm", tool="llm.mock", result_summary=f"{out.verdict} (heurística, sin LLM)", ts=_now()))
         else:
             out = _llm_deep(pack, tb, emit) if deep else _llm_fast(pack, emit)
+            if not sus and not _is_outlier_fp(fp) and out.verdict != "needs_more_info":
+                fp_cache.parent.mkdir(parents=True, exist_ok=True)
+                fp_cache.write_text(out.model_dump_json(indent=2), encoding="utf-8")
     except Exception as e:  # noqa: BLE001  — el sistema nunca se cae: deja la alerta a la persona
         out = LLMTriage(title=f"{pack.alert['rule_name']} (sin triaje automático)", verdict="needs_more_info", confidence=0.0,
                         summary=f"El agente no pudo completar el triaje: {str(e)[:200]}. Requiere revisión humana.",
@@ -173,6 +199,7 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
         emit(TraceStep(step=0, kind="llm", tool="llm.error", result_summary=str(e)[:200], ts=_now()))
 
     ticket = apply_policy(out, pack, started)
+    ticket.pattern_id = fp
     emit(TraceStep(step=0, kind="policy", tool="policy.apply", input={"regla": pack.alert["severity"]},
                    result_summary=f"{ticket.verdict} · severidad {ticket.severity} · escalar {ticket.escalation.escalate}"
                    + (f" · {len(ticket.policy_notes)} corrección(es)" if ticket.policy_notes else ""), ts=_now()))
@@ -184,7 +211,17 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
 
 
 if __name__ == "__main__":
-    aid = sys.argv[1] if len(sys.argv) > 1 else "ALR-20261009-011793"
-    tk = triage_alert(aid, deep="--deep" in sys.argv, use_cache=False,
-                      on_step=lambda s: print(f"  {s.step:>2} [{s.kind:9}] {s.tool:22} {s.ms:>5} ms  {s.result_summary[:100]}"))
-    print(json.dumps(tk.model_dump(exclude={"trace"}), ensure_ascii=False, indent=2))
+    if "--batch-dev" in sys.argv:
+        from core.store import rows
+        dev_alerts = [r["alert_id"] for r in rows("SELECT alert_id FROM alerts WHERE dev_sample ORDER BY created_at")]
+        print(f"Triando {len(dev_alerts)} alertas de desarrollo (con caché de huellas)...")
+        for i, aid in enumerate(dev_alerts, 1):
+            t0 = time.time()
+            tk = triage_alert(aid, deep="--deep" in sys.argv, use_cache="--force" not in sys.argv)
+            src = next((s.tool for s in tk.trace if s.kind == "llm"), "cache")
+            print(f"[{i:3}/{len(dev_alerts)}] {aid} ({time.time()-t0:4.1f}s, {src:22}) -> {tk.verdict:20} | {tk.severity:13} | manip={tk.manipulation_attempt}")
+    else:
+        aid = sys.argv[1] if len(sys.argv) > 1 else "ALR-20261009-011793"
+        tk = triage_alert(aid, deep="--deep" in sys.argv, use_cache=False,
+                          on_step=lambda s: print(f"  {s.step:>2} [{s.kind:9}] {s.tool:22} {s.ms:>5} ms  {s.result_summary[:100]}"))
+        print(json.dumps(tk.model_dump(exclude={"trace"}), ensure_ascii=False, indent=2))
