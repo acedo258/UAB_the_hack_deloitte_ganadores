@@ -77,3 +77,31 @@ def test_eventos_citables_y_pack_dentro_de_limites():
         assert len(json.dumps(p.model_dump(exclude={"trace"}), ensure_ascii=False, default=str)) <= PACK_MAX_CHARS
         # las recetas quedan en la traza para que la consola enseñe "qué consultó la IA"
         assert any(s.tool.startswith("recipe.") for s in p.trace)
+
+
+# ---- bloque 4: correcciones tras la prueba a escala
+def test_rb10_paquetes_populares_no_avisan():
+    # esbuild, sharp y puppeteer descargan binarios por diseño (RB-10.1): sin secretos ni registro equivocado, sin aviso
+    for aid in ("ALR-20261016-004966", "ALR-20261022-007267"):
+        assert not _check(aid, "RB-10.paquete").attention
+
+
+def test_rb10_dependency_confusion_avisa():
+    c = _check("ALR-20261013-011901", "RB-10.paquete")
+    assert c.attention and "dependency confusion" in c.answer
+
+
+def test_rb09_tunel_dns():
+    c = _check("ALR-20261011-011883", "RB-09.tunel.cdn-wms-metrics.example")
+    assert c.attention and "túnel DNS" in c.answer
+
+
+def test_rb02_cuentas_sin_error_y_admin_fuera_de_jump01():
+    c = _check("ALR-20261018-011896", "RB-02.cuentas")
+    assert not c.answer.startswith("no se pudo") and c.attention and "adm.aortega" in c.answer
+
+
+def test_pack_grande_cabe():
+    from core.context import build_pack
+    p = build_pack("ALR-20261011-011802")      # credential stuffing con muchos eventos relacionados
+    assert len(json.dumps(p.model_dump(exclude={"trace"}), ensure_ascii=False, default=str)) <= PACK_MAX_CHARS

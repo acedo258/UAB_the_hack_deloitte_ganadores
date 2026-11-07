@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable
 
 from core.schemas import Check
-from core.store import norm_user, rows
+from core.store import is_hub, norm_user, rows
 from core.tools import ToolBox, _iso
 
 MAX_EVENTS = 8
@@ -39,6 +39,7 @@ SUSPICIOUS_CMD = (r"vssadmin|shadowcopy|wbadmin|bcdedit|lsass|procdump|comsvcs|m
 COMPRESS_CMD = r"7z|7za|winrar|\brar\b|zip|compress-archive|tar\s|gpg|veracrypt|makecab"
 PERSISTENCE_OPS = ("New-InboxRule", "Consent to application", "Add-MfaMethod", "Set-MailboxAutoReply")
 CLOUD_SENSITIVE = r"^(GetCallerIdentity|List|Describe|Create|Attach|Put.*Policy|Delete(Trail|Bucket)|StopLogging|UpdateAssumeRole)"
+SECRET_RE = r"(AWS_[A-Z_]+|NPM_TOKEN|GITHUB_TOKEN|[A-Z_]*SECRET[A-Z_]*)"
 OT_PORTS = ("502", "44818")
 OT_AUTHORIZED = {"ENG-WS01", "WMS01"}
 
@@ -258,7 +259,7 @@ def rb02(c: Ctx) -> None:
                      FROM ad_events WHERE upper(src_host) = ? AND ts BETWEEN ? AND ? GROUP BY ALL ORDER BY primero LIMIT 8""",
                   [h, iso(c.t - D), iso(c.t + D)])
         edr_users = [x["u"] for x in rows("""SELECT DISTINCT norm_user("user") u FROM edr_events WHERE upper(hostname) = ?
-                                             AND ts BETWEEN ? AND ? AND "user" IS NOT NULL""", [h, iso(c.t - D), iso(c.t + D)])]
+                                             AND ts BETWEEN ? AND ? AND "user" IS NOT NULL""", [h, iso(c.t - D), iso(c.t + D)]) if x["u"]]
         priv = [u for u in edr_users + [x["cuenta"] for x in ad] if u and u.startswith("adm.")]
         flag = bool(priv) and h != "JUMP01"
         return (f"cuentas activas en {h} (±24 h): {', '.join(sorted(set(edr_users))) or 'ninguna en EDR'}; {len(ad)} eventos de AD desde el equipo"
@@ -304,7 +305,8 @@ def rb03(c: Ctx) -> None:
                       "user_agent", "device_id", "device_compliant", "risk_level"]) for x in r]
         ips = sorted({x["src_ip"] for x in r if x.get("src_ip")})
         devs = sorted({str(x.get("device_id")) for x in r})
-        return f"{what}: {len(r)} eventos, IPs {', '.join(ips) or '-'}, dispositivos {', '.join(devs)}", len(ips) > 1, evs, len(r)
+        # Solo contexto: si el origen es anómalo lo juzga BL.user_origin (país, ASN común, origen ya alertado)
+        return f"{what}: {len(r)} eventos, IPs {', '.join(ips) or '-'}, dispositivos {', '.join(devs)}", False, evs, len(r)
     c.add("RB-03.sesion", "RB-03.1-2 La sesión completa: origen, dispositivo y user agent", sesion)
 
     if not u:
@@ -319,25 +321,7 @@ def rb03(c: Ctx) -> None:
                 fails >= 3 and d.get("approved", 0) > 0, [], fails)
     c.add("RB-03.mfa", "RB-03.3 Secuencia de MFA (muchos denied/timeout y luego approved = fatiga MFA)", mfa)
 
-    def conocido():
-        ips = c.ext_ips(3) or ([c.ev["src_ip"]] if c.ev.get("src_ip") else [])
-        out, flag = [], False
-        for ip in ips:
-            g = rows("SELECT country, asn, as_org FROM geoip WHERE ip = ?", [ip])
-            g = g[0] if g else {}
-            prev = rows("""SELECT count(*) FILTER (WHERE src_ip = ?) ip_n,
-                                  count(*) FILTER (WHERE asn = ?) asn_n,
-                                  count(*) FILTER (WHERE country = ?) pais_n, count(*) total
-                           FROM idp_signins WHERE norm_user(user_upn) = ? AND ts < ?""",
-                        [ip, str(g.get("asn", "")), g.get("country", ""), u, iso(c.t - H)])[0]
-            out.append({"ip": ip, "pais": g.get("country"), "asn": g.get("as_org"), "veces_ip_antes": prev["ip_n"],
-                        "veces_asn_antes": prev["asn_n"], "veces_pais_antes": prev["pais_n"], "inicios_previos_totales": prev["total"]})
-            flag |= prev["ip_n"] == 0 and prev["pais_n"] == 0
-        if not out:
-            return "la alerta no trae IP externa", False, [], None
-        return ("; ".join(f"{o['ip']} ({o['pais']}): IP vista {o['veces_ip_antes']} veces, país {o['veces_pais_antes']} de {o['inicios_previos_totales']}"
-                          for o in out), flag, out, len(out))
-    c.add("RB-03.conocido", "RB-03.1 ¿El usuario había entrado antes desde esa IP, ASN o país?", conocido)
+    # RB-03.1 "¿origen conocido?" lo responde BL.user_origin (core/baseline.py), con país, ASN común y origen ya alertado
 
     def despues():
         r = rows("""SELECT * FROM idp_audit WHERE (norm_user(actor_upn) = ? OR norm_user(target) = ?) AND ts BETWEEN ? AND ?
@@ -603,7 +587,9 @@ def rb09(c: Ctx) -> None:
                 return "ningún equipo interno en el proxy", False, [], None
             ts = [_iso(x["ts"]) for x in rows("""SELECT ts FROM proxy WHERE lower(domain) = ? AND upper(hostname) = ?
                                                   AND ts BETWEEN ? AND ? ORDER BY ts""", [d, h, iso(c.t - D), iso(c.t + D)])]
-            if len(ts) < 5:   # sin proxy (p. ej. túnel DNS): probamos con las consultas DNS
+            via = "proxy"
+            if len(ts) < 5:   # sin proxy: probamos con DNS, pero en DNS la periodicidad es normal (resolvers, listas antispam)
+                via = "DNS"
                 ts = [_iso(x["ts"]) for x in rows("""SELECT ts FROM dns WHERE (lower(query) = ? OR lower(query) LIKE ?)
                           AND upper(hostname) = ? AND ts BETWEEN ? AND ? ORDER BY ts""", [d, f"%.{d}", h, iso(c.t - D), iso(c.t + D)])]
             gaps = [(b - a).total_seconds() for a, b in zip(ts, ts[1:])]
@@ -611,10 +597,28 @@ def rb09(c: Ctx) -> None:
                 return f"{h} → {d}: {len(ts)} conexiones en ±24 h, pocas para medir periodicidad", False, [], len(ts)
             mean, sd = statistics.mean(gaps), statistics.pstdev(gaps)
             cv = sd / mean if mean else 0
-            return (f"{h} → {d}: {len(ts)} conexiones, intervalo medio {mean:.0f} s, variación {cv:.0%}"
-                    + (" → periódico, típico de beaconing" if cv < 0.25 else ""), cv < 0.25,
+            periodic = cv < 0.25
+            return (f"{h} → {d} ({via}): {len(ts)} conexiones, intervalo medio {mean:.0f} s, variación {cv:.0%}"
+                    + (" → periódico, típico de beaconing" if periodic and via == "proxy" else "")
+                    + (" → periódico, pero en DNS eso es normal; ver RB-09.tunel" if periodic and via == "DNS" else ""),
+                    periodic and via == "proxy" and not is_hub(d),
                     [{"host": h, "conexiones": len(ts), "intervalo_medio_s": round(mean), "desviacion_s": round(sd)}], len(ts))
         c.add(f"RB-09.beacon.{d}", f"RB-09.1 Beaconing hacia {d}: intervalo y varianza", beacon)
+
+        def tunel(d=d):
+            # Túnel DNS: muchos subdominios distintos y largos (datos codificados en la etiqueta), no periodicidad
+            r = rows("""SELECT count(*) n, count(DISTINCT lower(query)) distintas,
+                               avg(length(split_part(lower(query), '.', 1))) etiqueta_media,
+                               count(*) FILTER (WHERE qtype = 'TXT') txt, count(DISTINCT upper(hostname)) equipos
+                        FROM dns WHERE lower(query) LIKE ? AND ts BETWEEN ? AND ?""", [f"%.{d}", iso(c.t - D), iso(c.t + D)])[0]
+            if not r["n"]:
+                return f"{d}: sin consultas DNS a subdominios en ±24 h", False, [], 0
+            lab = r["etiqueta_media"] or 0
+            sus = r["distintas"] >= 50 and lab >= 20
+            return (f"{d}: {r['n']} consultas a {r['distintas']} subdominios distintos, etiqueta media {lab:.0f} caracteres, "
+                    f"{r['txt']} de tipo TXT, desde {r['equipos']} equipo(s)" + (" → patrón de túnel DNS" if sus else ""),
+                    sus, [r], r["distintas"])
+        c.add(f"RB-09.tunel.{d}", f"RB-09.1 ¿Túnel DNS hacia {d}? (subdominios distintos y su longitud)", tunel)
 
     acct = next((u for u in c.users() if u.startswith(("adm.", "svc_"))), None) or norm_user(c.ev.get("account") or "")
     if acct:
@@ -652,7 +656,7 @@ def rb10(c: Ctx) -> None:
         if not build:
             return "la alerta no trae build", False, [], None
         txt = " ".join(json.dumps(s.get("details"), default=str) for s in steps)
-        secrets = sorted(set(re.findall(r"(AWS_[A-Z_]+|NPM_TOKEN|GITHUB_TOKEN|[A-Z_]*SECRET[A-Z_]*)", txt)))
+        secrets = sorted(set(re.findall(SECRET_RE, txt)))
         deployed = any(s["step"] == "deploy" and s["status"] in ("ok", "success") for s in steps)
         evs = [ev(s, ["step", "status", "runner", "details"]) for s in steps]
         return (f"build {build}: {len(steps)} pasos; {'SE DESPLEGÓ' if deployed else 'no llegó a desplegarse'}"
@@ -661,11 +665,19 @@ def rb10(c: Ctx) -> None:
 
     if pkg:
         def paquete():
-            name = re.split(r"@(?=\d)", str(pkg))[0]
+            name = re.split(r"@(?=\d)", str(pkg).split()[0])[0]
+            # El nombre del paquete está en el paso del build ("postinstall:puppeteer"), no en details
             r = rows("""SELECT count(DISTINCT build_id) builds, min(ts) primero FROM cicd_builds
-                        WHERE CAST(details AS VARCHAR) ILIKE ? AND ts < ?""", [f"%{name}%", iso(b0)])[0]
-            return (f"{name}: aparece en {r['builds']} builds anteriores" + (f" desde {r['primero']}" if r["builds"] else " — es NUEVO en el CI"),
-                    r["builds"] == 0, [], r["builds"])
+                        WHERE (step ILIKE ? OR CAST(details AS VARCHAR) ILIKE ?) AND ts < ?""", [f"%{name}%", f"%{name}%", iso(b0)])[0]
+            ev_txt = json.dumps(c.ev, ensure_ascii=False)
+            secrets = sorted(set(re.findall(SECRET_RE, ev_txt)))
+            wrong_registry = bool(c.ev.get("expected_package"))
+            txt = (f"{name}: aparece en {r['builds']} builds anteriores" + (f" desde {r['primero']}" if r["builds"] else " — NUEVO en el CI")
+                   + f"; registro: {c.ev.get('registry') or 'no indicado'}"
+                   + (f"; se esperaba {c.ev['expected_package']} (posible dependency confusion)" if wrong_registry else "")
+                   + (f"; lee secretos: {', '.join(secrets)}" if secrets else "; no lee secretos"))
+            # RB-10.1-2: nuevo por sí solo no basta (esbuild, sharp, puppeteer descargan binarios por diseño)
+            return txt, r["builds"] == 0 and (bool(secrets) or wrong_registry), [], r["builds"]
         c.add("RB-10.paquete", "RB-10.1 ¿El paquete es conocido en nuestros builds o es nuevo?", paquete)
 
     def credenciales():

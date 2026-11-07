@@ -177,6 +177,18 @@ def _fit(pack: ContextPack) -> None:
                 c.events = c.events[:-1]
         note("Eventos de apoyo de las comprobaciones recortados por tamaño")
     trim_timeline(0)
+    # Último recurso (p. ej. credential stuffing con decenas de eventos relacionados): eventos relacionados y texto
+    # no fiable, conservando primero lo sospechoso
+    while size() > PACK_MAX_CHARS and len(pack.related_events) > 5:
+        pack.related_events = pack.related_events[:-3]
+        note("Eventos relacionados recortados por tamaño")
+    if size() > PACK_MAX_CHARS:
+        pack.untrusted_fields = sorted(pack.untrusted_fields, key=lambda u: not u.suspicious)
+        for u in pack.untrusted_fields:
+            u.text = u.text[:200]
+        while size() > PACK_MAX_CHARS and len(pack.untrusted_fields) > 5 and not pack.untrusted_fields[-1].suspicious:
+            pack.untrusted_fields.pop()
+        note("Texto no fiable recortado por tamaño (los sospechosos se conservan)")
     for u in pack.users:          # campos que no aportan
         for k in ("user_id", "created"):
             u.pop(k, None)
