@@ -1,13 +1,13 @@
 {
-  "ticket_id": "TKT-20261020-011897-adb1",
+  "ticket_id": "TKT-20261020-011897-2a35",
   "alert_ids": [
     "ALR-20261020-011897"
   ],
-  "title": "Lectura de memoria de la aplicación de cobro (TPV) con indicadores maliciosos",
+  "title": "Un proceso no firmado en POS-T07-01 lee memoria del TPV y envía datos a un servicio externo",
   "verdict": "true_positive",
-  "confidence": 0.6,
+  "confidence": 0.95,
   "severity": "critical",
-  "severity_rationale": "Regla critical × activo Alta = critical",
+  "severity_rationale": "Regla critical × activo Alta = critical; +1 (ejecución/acceso confirmado, identidad VIP/privilegiada o datos personales/pagos) → critical",
   "affected": {
     "users": [],
     "hosts": [
@@ -18,22 +18,17 @@
     ],
     "customers": []
   },
-  "summary": "[MOCK] Hay indicadores maliciosos o un intento de manipulación.",
+  "summary": "Se detectó un proceso no firmado (possvc.exe) en POS-T07-01 que lee memoria del TPV (TarviaPOS.exe) y envía datos a pos-update-service.example (203.0.113.160). El servicio está asociado a un ticket SEC-2210 que no existe en el calendario de cambios, lo que indica actividad maliciosa. No hay actividad posterior confirmada en el equipo, pero el comportamiento es típico de ransomware o spyware.",
   "evidence": [
     {
-      "source": "intel",
-      "event_id": "",
-      "finding": "72354b9bbeb20742a892bc3fdc244c80890b1551cab2a150254b18e9d92e4241: sandbox: malicious RAM scraper de TPV"
+      "source": "edr_events",
+      "event_id": "EDR-0123438",
+      "finding": "Instalación de possvc.exe (sin firma) como servicio PosUpdateSvc en POS-T07-01, con ticket SEC-2210 que no existe en calendario_cambios.csv"
     },
     {
-      "source": "guardrail",
-      "event_id": "",
-      "finding": "alert.evidence.service_description: patrón «no requiere revisi»"
-    },
-    {
-      "source": "guardrail",
-      "event_id": "",
-      "finding": "related_events[0].details.description: patrón «no requiere revisi»"
+      "source": "edr_events",
+      "event_id": "EDR-0123439",
+      "finding": "possvc.exe lee memoria del proceso TarviaPOS.exe (120 veces/min) en POS-T07-01"
     }
   ],
   "enrichment": [
@@ -45,31 +40,50 @@
     }
   ],
   "mitre": [
-    "T1005"
+    "T1005",
+    "T1059.001"
   ],
   "recommended_actions": [
     {
       "action": "block_ioc",
-      "target": "72354b9bbeb20742a892bc3fdc244c80890b1551cab2a150254b18e9d92e4241",
+      "target": "pos-update-service.example",
       "requires_approval": false,
       "approver": "",
-      "justification": ""
+      "justification": "Dominio asociado a actividad maliciosa que no tiene autorización en calendario_cambios.csv"
+    },
+    {
+      "action": "block_ioc",
+      "target": "203.0.113.160",
+      "requires_approval": false,
+      "approver": "",
+      "justification": "IP externa utilizada por el servicio malicioso"
+    },
+    {
+      "action": "isolate_host",
+      "target": "POS-T07-01",
+      "requires_approval": true,
+      "approver": "N2 + negocio",
+      "justification": "Equipo crítico en zona STORES con datos PCI DSS · Impacto en ventas"
     }
   ],
   "executed_actions": [],
   "escalation": {
     "escalate": true,
     "to": "N2 de guardia por teléfono + Responsable SOC + CISO",
-    "reason": "true_positive critical; indicadores maliciosos"
+    "reason": "true_positive critical; ejecución o acceso confirmado; datos personales o pagos implicados (valorar DPO / Tesorería); Actividad maliciosa en equipo crítico con datos PCI DSS y no autorizada"
   },
-  "open_questions": [],
-  "triage_seconds": 0.1,
+  "open_questions": [
+    "¿Qué usuario o proceso inició sesión en POS-T07-01 antes de la instalación del servicio malicioso?"
+  ],
+  "triage_seconds": 29.4,
   "manipulation_attempt": true,
   "manipulation_detail": "alert.evidence.service_description: patrón «no requiere revisi»; related_events[0].details.description: patrón «no requiere revisi»",
-  "llm_severity": null,
-  "policy_notes": [],
-  "pattern_id": "",
-  "status": "escalated",
+  "llm_severity": "critical",
+  "policy_notes": [
+    "isolate_host sobre POS-T07-01: aprobación corregida a True (N2 + negocio)"
+  ],
+  "pattern_id": "UC-EDR-012:c4343eb893",
+  "status": "proposed",
   "trace": [
     {
       "step": 1,
@@ -79,8 +93,8 @@
         "alert_id": "ALR-20261020-011897"
       },
       "result_summary": "UC-EDR-012 critical",
-      "ms": 19,
-      "ts": "2026-11-07T11:41:05.729677+00:00"
+      "ms": 1,
+      "ts": "2026-11-07T13:51:41.636181+00:00"
     },
     {
       "step": 2,
@@ -90,8 +104,8 @@
         "key": "POS-T07-01"
       },
       "result_summary": "POS-T07-01 criticidad Alta (STORES, Cobro en tienda (PCI DSS))",
-      "ms": 3,
-      "ts": "2026-11-07T11:41:05.734526+00:00"
+      "ms": 2,
+      "ts": "2026-11-07T13:51:41.639506+00:00"
     },
     {
       "step": 3,
@@ -101,8 +115,8 @@
         "indicator": "72354b9bbeb20742a892bc3fdc244c80890b1551cab2a150254b18e9d92e4241"
       },
       "result_summary": "sandbox: malicious RAM scraper de TPV",
-      "ms": 4,
-      "ts": "2026-11-07T11:41:05.739271+00:00"
+      "ms": 5,
+      "ts": "2026-11-07T13:51:41.644623+00:00"
     },
     {
       "step": 4,
@@ -117,8 +131,8 @@
         "ts": "2026-10-20T08:04:48.000Z"
       },
       "result_summary": "ningún cambio aprobado encaja",
-      "ms": 1,
-      "ts": "2026-11-07T11:41:05.740959+00:00"
+      "ms": 0,
+      "ts": "2026-11-07T13:51:41.645694+00:00"
     },
     {
       "step": 5,
@@ -132,7 +146,7 @@
       },
       "result_summary": "2/2 eventos encontrados",
       "ms": 7,
-      "ts": "2026-11-07T11:41:05.748615+00:00"
+      "ts": "2026-11-07T13:51:41.652924+00:00"
     },
     {
       "step": 6,
@@ -144,8 +158,8 @@
         "hasta": "2026-10-21T08:04:48+00:00"
       },
       "result_summary": "33 eventos: proxy 31, edr_events 2",
-      "ms": 62,
-      "ts": "2026-11-07T11:41:05.810731+00:00"
+      "ms": 55,
+      "ts": "2026-11-07T13:51:41.708832+00:00"
     },
     {
       "step": 7,
@@ -157,8 +171,8 @@
         "hasta": "2026-10-27T08:04:48+00:00"
       },
       "result_summary": "1 alertas: UC-NET-001",
-      "ms": 5,
-      "ts": "2026-11-07T11:41:05.816459+00:00"
+      "ms": 4,
+      "ts": "2026-11-07T13:51:41.712976+00:00"
     },
     {
       "step": 8,
@@ -169,16 +183,18 @@
       },
       "result_summary": "⚠ 2 texto(s) intentan dar instrucciones: alert.evidence.service_description; related_events[0].details.description",
       "ms": 0,
-      "ts": "2026-11-07T11:41:05.817291+00:00"
+      "ts": "2026-11-07T13:51:41.713700+00:00"
     },
     {
       "step": 9,
       "kind": "llm",
-      "tool": "llm.mock",
-      "input": {},
-      "result_summary": "true_positive (heurística, sin LLM)",
-      "ms": 0,
-      "ts": "2026-11-07T11:41:05.817354+00:00"
+      "tool": "llm.triage (qwen3-soc)",
+      "input": {
+        "intento": 1
+      },
+      "result_summary": "true_positive · conf 0.95 · 6306 tokens",
+      "ms": 29343,
+      "ts": "2026-11-07T13:52:11.057076+00:00"
     },
     {
       "step": 10,
@@ -187,9 +203,9 @@
       "input": {
         "regla": "critical"
       },
-      "result_summary": "true_positive · severidad critical · escalar True",
+      "result_summary": "true_positive · severidad critical · escalar True · 1 corrección(es)",
       "ms": 0,
-      "ts": "2026-11-07T11:41:05.817569+00:00"
+      "ts": "2026-11-07T13:52:11.057224+00:00"
     }
   ]
 }

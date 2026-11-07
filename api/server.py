@@ -15,8 +15,8 @@ from typing import Literal, Optional
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
 from agent.triage import triage_alert
 from core.config import CACHE_DIR, MOCK_API_URL, ROOT
@@ -29,6 +29,7 @@ app = FastAPI(title="SOC N1 · Tarvia", version="0.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 TICKETS = CACHE_DIR / "tickets"
+FIXTURES = ROOT / "fixtures"
 DECISIONS = ROOT / "data" / "decisions.jsonl"
 _patterns: list[dict] | None = None
 _alert_pattern: dict[str, dict] = {}
@@ -49,6 +50,14 @@ def load_ticket(alert_id: str) -> Optional[Ticket]:
         f = TICKETS / f"{alert_id}{suffix}"
         if f.exists():
             return Ticket.model_validate_json(f.read_text(encoding="utf-8"))
+    f_fix = FIXTURES / f"ticket_{alert_id}.json"
+    if f_fix.exists():
+        return Ticket.model_validate_json(f_fix.read_text(encoding="utf-8"))
+    if FIXTURES.exists():
+        for fx in FIXTURES.glob("ticket_*.json"):
+            t = Ticket.model_validate_json(fx.read_text(encoding="utf-8"))
+            if t.ticket_id == alert_id or alert_id in t.alert_ids:
+                return t
     return None
 
 
@@ -76,6 +85,7 @@ def stats():
 
 
 @app.get("/api/queue")
+@app.get("/queue")
 def queue_(dev: bool = True, rule_id: str = "", outliers_only: bool = False, limit: int = 100, offset: int = 0):
     patterns()
     cond, params = ["1=1"], []
@@ -118,6 +128,7 @@ def event(event_id: str):
 
 
 @app.get("/api/patterns")
+@app.get("/patterns")
 def list_patterns(min_count: int = 1):
     return [{k: v for k, v in p.items() if k != "alert_ids"} | {"ticket": _ticket_brief(p["sample_alert_id"])}
             for p in patterns() if p["count"] >= min_count]
@@ -129,6 +140,7 @@ def _ticket_brief(aid: str):
 
 
 @app.get("/api/tickets/{alert_id}")
+@app.get("/tickets/{alert_id}")
 def ticket(alert_id: str):
     t = load_ticket(alert_id)
     if t is None:
@@ -137,9 +149,7 @@ def ticket(alert_id: str):
 
 
 # ------------------------------------------------------------------ triaje en directo (SSE)
-@app.get("/api/triage/{alert_id}/stream")
-def triage_stream(alert_id: str, deep: bool = False, force: bool = False):
-    """Emite cada TraceStep como evento 'step' y al final el ticket como evento 'ticket'."""
+def _sse_stream(alert_id: str, deep: bool = False, force: bool = False):
     q: queue.Queue = queue.Queue()
 
     def work():
@@ -155,9 +165,17 @@ def triage_stream(alert_id: str, deep: bool = False, force: bool = False):
     def gen():
         while (item := q.get()) is not None:
             kind, data = item
-            yield f"event: {kind}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+            yield {"event": kind, "data": json.dumps(data, ensure_ascii=False, default=str)}
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    return EventSourceResponse(gen())
+
+
+@app.get("/api/triage/{alert_id}/stream")
+@app.post("/api/triage/{alert_id}")
+@app.post("/triage/{alert_id}")
+def triage_stream(alert_id: str, deep: bool = False, force: bool = False):
+    """Emite cada TraceStep como evento 'step' y al final el ticket como evento 'ticket'."""
+    return _sse_stream(alert_id, deep=deep, force=force)
 
 
 # ------------------------------------------------------------------ decisiones humanas
@@ -252,6 +270,7 @@ def containment_log():
 
 # ------------------------------------------------------------------ incidentes y correlación
 @app.get("/api/incidents")
+@app.get("/incidents")
 def list_incidents():
     """Devuelve los incidentes correlacionados con grafo y kill chain."""
     try:

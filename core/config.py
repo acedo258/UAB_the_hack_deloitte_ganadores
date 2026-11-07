@@ -13,7 +13,7 @@ MOCK_API_URL = os.getenv("MOCK_API_URL", "http://localhost:8000")
 
 # LLM: cualquier endpoint compatible con OpenAI (Ollama, Groq, vLLM...)
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
-LLM_MODEL = os.getenv("LLM_MODEL", "qwen3:8b")
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen3-soc")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "ollama")
 LLM_TIMEOUT_S = float(os.getenv("LLM_TIMEOUT_S", "120"))
 

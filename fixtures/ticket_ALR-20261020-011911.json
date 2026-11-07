@@ -1,11 +1,11 @@
 {
-  "ticket_id": "TKT-20261020-011911-153e",
+  "ticket_id": "TKT-20261020-011911-3b7c",
   "alert_ids": [
     "ALR-20261020-011911"
   ],
-  "title": "Clic en URL de phishing con indicadores maliciosos",
+  "title": "Usuario Lucía Castro hizo clic en enlace phishing de facturas de Packaging Iberia",
   "verdict": "true_positive",
-  "confidence": 0.6,
+  "confidence": 0.9,
   "severity": "high",
   "severity_rationale": "Regla high × activo Alta = high",
   "affected": {
@@ -20,12 +20,22 @@
     ],
     "customers": []
   },
-  "summary": "[MOCK] Hay indicadores maliciosos o un intento de manipulación.",
+  "summary": "Lucía Castro (Responsable de Tesorería) hizo clic en un enlace de phishing de Packaging Iberia (dominio desconocido) a las 06:23. El enlace redirigió a una página de facturas con parámetros de usuario. No hubo envío de credenciales, pero hubo una sesión de inicio de sesión anómalo en el dominio phishing. El sistema de clasificación de seguridad intentó marcarlo como false_positive pero el contexto muestra actividad maliciosa.",
   "evidence": [
     {
-      "source": "guardrail",
-      "event_id": "",
-      "finding": "alert.evidence.email_body_excerpt: patrón «display:none»"
+      "source": "email_clicks",
+      "event_id": "CLK-0017754",
+      "finding": "Lucía Castro hizo clic en el enlace phishing de Packaging Iberia a las 06:23 (UTC+0)"
+    },
+    {
+      "source": "proxy",
+      "event_id": "PRX-0212748",
+      "finding": "Solicitud GET a https://packaging-iberia-portal.example/facturas/FV-2026-10-8812?u=lucia.castro con 52000 bytes recibidos"
+    },
+    {
+      "source": "proxy",
+      "event_id": "PRX-0212749",
+      "finding": "Solicitud POST a https://packaging-iberia-portal.example/common/login con 700 bytes recibidos"
     }
   ],
   "enrichment": [
@@ -41,26 +51,46 @@
   ],
   "recommended_actions": [
     {
-      "action": "escalate",
-      "target": "ticket",
+      "action": "block_ioc",
+      "target": "packaging-iberia-portal.example",
       "requires_approval": false,
       "approver": "",
-      "justification": "Acción por defecto según veredicto"
+      "justification": "Dominio sospechoso asociado a phishing, no está en dominios autorizados (ver contexto de Tarvia)"
+    },
+    {
+      "action": "revoke_sessions",
+      "target": "lucia.castro",
+      "requires_approval": true,
+      "approver": "N2",
+      "justification": "Sesión anómala en dominio phishing (PRX-0212749) y actividad de clic en phishing"
+    },
+    {
+      "action": "reset_password",
+      "target": "lucia.castro",
+      "requires_approval": true,
+      "approver": "N2",
+      "justification": "Sesión anómala en dominio phishing y actividad de clic en phishing"
     }
   ],
   "executed_actions": [],
   "escalation": {
     "escalate": true,
     "to": "N2 (misma jornada) + Responsable SOC",
-    "reason": "true_positive high; indicadores maliciosos"
+    "reason": "true_positive high"
   },
-  "open_questions": [],
-  "triage_seconds": 0.2,
+  "open_questions": [
+    "¿El dominio packaging-iberia-portal.example está en la lista de dominios autorizados para el usuario?"
+  ],
+  "triage_seconds": 34.5,
   "manipulation_attempt": true,
   "manipulation_detail": "alert.evidence.email_body_excerpt: patrón «display:none»",
-  "llm_severity": null,
-  "policy_notes": [],
-  "pattern_id": "",
+  "llm_severity": "medium",
+  "policy_notes": [
+    "El LLM proponía medium; la matriz da high",
+    "revoke_sessions sobre lucia.castro: aprobación corregida a True (N2)",
+    "reset_password sobre lucia.castro: aprobación corregida a True (N2)"
+  ],
+  "pattern_id": "UC-EML-003:2f91ee5e5a",
   "status": "proposed",
   "trace": [
     {
@@ -71,8 +101,8 @@
         "alert_id": "ALR-20261020-011911"
       },
       "result_summary": "UC-EML-003 high",
-      "ms": 7,
-      "ts": "2026-11-07T11:43:53.482510+00:00"
+      "ms": 16,
+      "ts": "2026-11-07T13:53:17.898870+00:00"
     },
     {
       "step": 2,
@@ -82,8 +112,8 @@
         "key": "WS-BCN-1053"
       },
       "result_summary": "WS-BCN-1053 criticidad Alta (HQ-USERS, Puesto de trabajo)",
-      "ms": 3,
-      "ts": "2026-11-07T11:43:53.487363+00:00"
+      "ms": 1,
+      "ts": "2026-11-07T13:53:17.901457+00:00"
     },
     {
       "step": 3,
@@ -93,8 +123,8 @@
         "key": "lucia.castro"
       },
       "result_summary": "Lucía Castro · Responsable de Tesorería · tipo user · priv False · VIP False",
-      "ms": 3,
-      "ts": "2026-11-07T11:43:53.491089+00:00"
+      "ms": 1,
+      "ts": "2026-11-07T13:53:17.902906+00:00"
     },
     {
       "step": 4,
@@ -104,8 +134,8 @@
         "indicator": "packaging-iberia-portal.example"
       },
       "result_summary": "sin coincidencias (desconocido, no limpio)",
-      "ms": 3,
-      "ts": "2026-11-07T11:43:53.494360+00:00"
+      "ms": 2,
+      "ts": "2026-11-07T13:53:17.904982+00:00"
     },
     {
       "step": 5,
@@ -123,7 +153,7 @@
       },
       "result_summary": "ningún cambio aprobado encaja",
       "ms": 1,
-      "ts": "2026-11-07T11:43:53.496192+00:00"
+      "ts": "2026-11-07T13:53:17.906418+00:00"
     },
     {
       "step": 6,
@@ -137,8 +167,8 @@
         ]
       },
       "result_summary": "3/3 eventos encontrados",
-      "ms": 10,
-      "ts": "2026-11-07T11:43:53.506325+00:00"
+      "ms": 5,
+      "ts": "2026-11-07T13:53:17.912080+00:00"
     },
     {
       "step": 7,
@@ -150,8 +180,8 @@
         "hasta": "2026-10-21T07:05:22+00:00"
       },
       "result_summary": "45 eventos: proxy 14, edr_events 12, email 8, idp_signins 6, email_clicks 2, vpn 2, ad_events 1",
-      "ms": 79,
-      "ts": "2026-11-07T11:43:53.586173+00:00"
+      "ms": 66,
+      "ts": "2026-11-07T13:53:17.978326+00:00"
     },
     {
       "step": 8,
@@ -163,8 +193,8 @@
         "hasta": "2026-10-21T07:05:22+00:00"
       },
       "result_summary": "37 eventos: proxy 14, edr_events 12, dns 11",
-      "ms": 69,
-      "ts": "2026-11-07T11:43:53.656219+00:00"
+      "ms": 49,
+      "ts": "2026-11-07T13:53:18.028060+00:00"
     },
     {
       "step": 9,
@@ -176,8 +206,8 @@
         "hasta": "2026-10-27T07:05:22+00:00"
       },
       "result_summary": "3 alertas: UC-EML-001, UC-IDP-001, UC-IDP-006",
-      "ms": 4,
-      "ts": "2026-11-07T11:43:53.660725+00:00"
+      "ms": 2,
+      "ts": "2026-11-07T13:53:18.030816+00:00"
     },
     {
       "step": 10,
@@ -189,8 +219,8 @@
         "hasta": "2026-10-27T07:05:22+00:00"
       },
       "result_summary": "0 alertas",
-      "ms": 3,
-      "ts": "2026-11-07T11:43:53.664052+00:00"
+      "ms": 2,
+      "ts": "2026-11-07T13:53:18.033428+00:00"
     },
     {
       "step": 11,
@@ -201,16 +231,18 @@
       },
       "result_summary": "⚠ 1 texto(s) intentan dar instrucciones: alert.evidence.email_body_excerpt",
       "ms": 0,
-      "ts": "2026-11-07T11:43:53.665272+00:00"
+      "ts": "2026-11-07T13:53:18.034667+00:00"
     },
     {
       "step": 12,
       "kind": "llm",
-      "tool": "llm.mock",
-      "input": {},
-      "result_summary": "true_positive (heurística, sin LLM)",
-      "ms": 0,
-      "ts": "2026-11-07T11:43:53.665330+00:00"
+      "tool": "llm.triage (qwen3-soc)",
+      "input": {
+        "intento": 1
+      },
+      "result_summary": "true_positive · conf 0.90 · 8037 tokens",
+      "ms": 34365,
+      "ts": "2026-11-07T13:53:52.400520+00:00"
     },
     {
       "step": 13,
@@ -219,9 +251,9 @@
       "input": {
         "regla": "high"
       },
-      "result_summary": "true_positive · severidad high · escalar True",
+      "result_summary": "true_positive · severidad high · escalar True · 3 corrección(es)",
       "ms": 0,
-      "ts": "2026-11-07T11:43:53.665538+00:00"
+      "ts": "2026-11-07T13:53:52.400740+00:00"
     }
   ]
 }
