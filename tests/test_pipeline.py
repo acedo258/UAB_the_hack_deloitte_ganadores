@@ -189,3 +189,17 @@ def test_cited_ids_missing():
                               Evidence(source="edr", event_id="EDR-9999999", finding="inventado"),
                               Evidence(source="intel", finding="sin id")])
     assert cited_ids_missing(out, '{"timeline": ["EDR-0000001"]}') == ["EDR-9999999"]
+
+
+def test_huella_reutilizada_usa_eventos_de_la_alerta():
+    from agent.triage import _adapt_reused, cited_ids_missing, render_pack
+    from core.schemas import Evidence, LLMTriage
+    pack = ContextPack.model_validate_json((ROOT / "fixtures" / "pack_ALR-20261005-000301.json").read_text(encoding="utf-8"))
+    otra = LLMTriage(title="t", verdict="benign_true_positive", confidence=0.9, summary="SCCM en otro equipo.",
+                     evidence=[Evidence(source="edr_events", event_id="EDR-DE-OTRA-ALERTA", finding="x")])
+    seen = render_pack(pack)
+    out = _adapt_reused(otra, pack, "UC-EDR-002:7d336606ee", "ALR-OTRA", seen)
+    assert out.verdict == "benign_true_positive"
+    assert not cited_ids_missing(out, seen)                 # ya no cita eventos de la otra alerta
+    assert any(e.event_id == "EDR-0005329" for e in out.evidence)
+    assert out.summary.startswith("[Veredicto reutilizado de ALR-OTRA")

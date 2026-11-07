@@ -165,6 +165,20 @@ def _mock_triage(pack: ContextPack) -> LLMTriage:
                      open_questions=["Configura un LLM (LLM_MODEL) para el triaje real"])
 
 
+def _adapt_reused(out: LLMTriage, pack: ContextPack, fp: str, src_alert: str, seen: str) -> LLMTriage:
+    """Un veredicto reutilizado por huella viene de OTRA alerta del mismo patrón. Se conserva el veredicto y los hechos,
+    pero la evidencia que cita eventos de aquella alerta se cambia por los eventos de esta, y el resumen lo avisa."""
+    own = [e for e in out.evidence if not e.event_id or e.event_id in seen]
+    dropped = len(out.evidence) - len(own)
+    if dropped:
+        own += [Evidence(source="siem", event_id=eid, finding="Evento de esta alerta; mismo patrón que la alerta ya triada")
+                for eid in (pack.alert.get("related_events") or [])[:5]]
+    own.append(Evidence(source="patron", finding=f"Veredicto reutilizado de {src_alert or 'otra alerta'} (patrón {fp})"))
+    note = (f"[Veredicto reutilizado de {src_alert or 'otra alerta'} del mismo patrón ({fp}); el resto del resumen "
+            "describe esa alerta: comprueba host y usuario en los datos de esta.] ")
+    return out.model_copy(update={"evidence": own, "summary": note + out.summary})
+
+
 def _model() -> str:
     return os.getenv("LLM_MODEL", config.LLM_MODEL)
 
@@ -275,7 +289,9 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
     llm_error = False
     try:
         if can_use_fp and fp_cache.exists():
-            out = LLMTriage.model_validate_json(fp_cache.read_text(encoding="utf-8"))
+            raw = json.loads(fp_cache.read_text(encoding="utf-8"))
+            src_alert = raw.pop("source_alert", "")
+            out = _adapt_reused(LLMTriage.model_validate(raw), pack, fp, src_alert, seen)
             from_fp_cache = True
             emit(TraceStep(step=0, kind="llm", tool="llm.cache_fingerprint", input={"pattern_id": fp},
                            result_summary=f"{out.verdict} · conf {out.confidence:.2f} (reutilizado de huella {fp})", ts=_now()))
@@ -289,7 +305,8 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
             contested = out.verdict == "true_positive" and bool(pack.matching_changes)
             if not sus and not _is_outlier_fp(fp) and out.verdict != "needs_more_info" and not contested:
                 fp_cache.parent.mkdir(parents=True, exist_ok=True)
-                fp_cache.write_text(out.model_dump_json(indent=2), encoding="utf-8")
+                fp_cache.write_text(json.dumps({"source_alert": alert_id, **out.model_dump()}, ensure_ascii=False, indent=2),
+                                    encoding="utf-8")
     except Exception as e:  # noqa: BLE001  — el sistema nunca se cae: deja la alerta a la persona
         llm_error = True      # no se guarda en caché: la próxima vez se reintenta
         out = LLMTriage(title=f"{pack.alert['rule_name']} {NO_TRIAGE}", verdict="needs_more_info", confidence=0.0,
@@ -359,13 +376,13 @@ def batch_dev(deep: bool = False, force: bool = False, limit: int | None = None)
     print(f"Triando {len(dev_alerts)} alertas de desarrollo con {_model()} (con caché de huellas)...")
     out_rows = []
     for i, aid in enumerate(dev_alerts, 1):
+        cached = not force and (CACHE_DIR / "tickets" / f"{aid}{'.deep' if deep else ''}.json").exists()
         t0 = time.time()
         tk = triage_alert(aid, deep=deep, use_cache=not force)
         dt = time.time() - t0
-        src = next((s.tool for s in tk.trace if s.kind == "llm" and not s.tool.startswith("llm.ventana")
-                    and "salida inválida" not in s.result_summary), "cache_ticket")
-        if dt < 0.05 and not force:
-            src = "cache_ticket"
+        src = "cache_ticket" if cached else next(
+            (s.tool for s in tk.trace if s.kind == "llm" and not s.tool.startswith("llm.ventana")
+             and "salida inválida" not in s.result_summary), "desconocido")
         missing = next((s.input.get("citados_no_en_contexto", []) for s in tk.trace if s.tool == "guardrail.evidence_ids"), [])
         out_rows.append({
             "alert_id": aid, "verdict": tk.verdict, "severity": tk.severity, "seconds": dt, "source": src,
