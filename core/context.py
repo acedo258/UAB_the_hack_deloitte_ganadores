@@ -14,7 +14,8 @@ from datetime import timedelta
 
 from core.config import PACK_MAX_CHARS
 from core.schemas import ContextPack, IntelResult, UntrustedField
-from core.recipes import run_recipes
+from core.baseline import run_baselines
+from core.recipes import Ctx as RecipeCtx, run_recipes
 from core.store import alert_entities, rows
 from core.tools import ToolBox, _intel_summary, _iso, local_time
 
@@ -126,6 +127,9 @@ def build_pack(alert_id: str, alert: dict | None = None, tb: ToolBox | None = No
 
     # Recetas del runbook: las comprobaciones concretas, ya resueltas (core/recipes.py)
     checks = run_recipes(a, by_type, tb)
+    # Comparación con lo habitual ("¿es la primera vez que…?"), para cualquier alerta (core/baseline.py)
+    cx = RecipeCtx(a, by_type, tb)
+    checks += run_baselines(a, by_type, tb, cx.users(), cx.hosts(), cx.ext_ips(20))
 
     untrusted = (find_untrusted(a.get("evidence", {}), "alert.evidence") + find_untrusted(related, "related_events")
                  + find_untrusted([ch.events for ch in checks], "checks"))
