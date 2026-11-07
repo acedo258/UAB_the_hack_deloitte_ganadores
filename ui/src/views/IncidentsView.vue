@@ -8,7 +8,7 @@
           <n-select
             v-model:value="selectedIncidentId"
             :options="incidentOptions"
-            style="width: 420px;"
+            style="width: 440px;"
             @update:value="onSelectIncident"
           />
         </n-space>
@@ -32,7 +32,7 @@
         <!-- Columna Izquierda: Línea temporal de la Cadena de Ataque (Kill Chain) -->
         <n-gi :span="9">
           <n-card title="⛓️ Cadena de Ataque (Kill Chain Timeline)" size="small" style="height: 600px; overflow-y: auto;">
-            <p style="margin: 0 0 12px 0; color: #475569; font-size: 13px;">
+            <p style="margin: 0 0 12px 0; color: #475569; font-size: 13px; line-height: 1.5;">
               {{ currentIncident.impact_summary }}
             </p>
             <n-divider style="margin: 8px 0 16px 0;" />
@@ -46,7 +46,7 @@
               />
             </n-timeline>
 
-            <n-divider title-placement="left" style="margin: 20px 0 12px 0;">Alertas involucradas</n-divider>
+            <n-divider title-placement="left" style="margin: 20px 0 12px 0;">Alertas correlacionadas</n-divider>
             <n-space :size="6" style="flex-wrap: wrap;">
               <n-button
                 v-for="aid in currentIncident.alerts"
@@ -67,11 +67,17 @@
         <n-gi :span="15">
           <n-card title="🕸️ Grafo de Entidades e Infraestructura Maliciosa (Cytoscape.js)" size="small" style="height: 600px;">
             <template #header-extra>
-              <n-space :size="6">
+              <n-space :size="8" align="center">
                 <n-tag size="tiny" type="error">C2 / Malicioso</n-tag>
                 <n-tag size="tiny" type="warning">Endpoint Afectado</n-tag>
                 <n-tag size="tiny" type="info">Identidad</n-tag>
-                <n-button size="tiny" secondary @click="fitGraph">Centrar grafo</n-button>
+                <n-tag size="tiny">Fichero / Proceso</n-tag>
+                <n-button size="tiny" secondary type="primary" @click="fitGraph">
+                  🎯 Centrar grafo
+                </n-button>
+                <n-button size="tiny" secondary @click="reLayout">
+                  🔄 Reordenar
+                </n-button>
               </n-space>
             </template>
             <div ref="cyContainer" class="cytoscape-box"></div>
@@ -152,74 +158,131 @@ function renderGraph(incident) {
     container: cyContainer.value,
     elements,
     style: [
+      // Estilo base de nodos
       {
         selector: 'node',
         style: {
-          'background-color': '#4f46e5',
+          'background-color': '#0ea5e9',
           label: 'data(label)',
           color: '#0f172a',
           'font-size': '11px',
-          'font-family': 'system-ui, sans-serif',
+          'font-weight': 600,
+          'font-family': 'system-ui, -apple-system, sans-serif',
           'text-valign': 'bottom',
-          'text-margin-y': 6,
-          width: 32,
-          height: 32,
+          'text-margin-y': 7,
+          'text-max-width': '110px',
+          'text-wrap': 'wrap',
+          'text-background-color': '#ffffff',
+          'text-background-opacity': 0.92,
+          'text-background-padding': '3px',
+          'text-background-shape': 'roundrectangle',
+          'border-width': 2,
+          'border-color': '#ffffff',
+          width: 38,
+          height: 38,
         },
       },
+      // C2 / IP Maliciosa
       {
         selector: 'node[type = "c2"], node[type = "ip"]',
         style: {
           'background-color': '#dc2626',
           shape: 'diamond',
-          width: 36,
-          height: 36,
+          width: 44,
+          height: 44,
         },
       },
+      // Host / Servidor objetivo
       {
         selector: 'node[type = "host"], node[type = "target"]',
         style: {
-          'background-color': '#f59e0b',
+          'background-color': '#d97706',
           shape: 'round-rectangle',
-          width: 36,
-          height: 28,
+          width: 44,
+          height: 34,
         },
       },
+      // Fichero / Payload
+      {
+        selector: 'node[type = "file"]',
+        style: {
+          'background-color': '#7c3aed',
+          shape: 'round-rectangle',
+          width: 38,
+          height: 32,
+        },
+      },
+      // Usuario / Identidad
       {
         selector: 'node[type = "user"]',
         style: {
-          'background-color': '#0ea5e9',
+          'background-color': '#0284c7',
           shape: 'ellipse',
         },
       },
+      // Regla / Servicio
+      {
+        selector: 'node[type = "rule"], node[type = "service"]',
+        style: {
+          'background-color': '#475569',
+          shape: 'hexagon',
+          width: 40,
+          height: 36,
+        },
+      },
+      // Aristas / Conexiones
       {
         selector: 'edge',
         style: {
-          width: 2,
+          width: 2.5,
           'line-color': '#94a3b8',
           'target-arrow-color': '#64748b',
           'target-arrow-shape': 'triangle',
+          'arrow-scale': 1.2,
           'curve-style': 'bezier',
           label: 'data(label)',
           'font-size': '10px',
-          color: '#475569',
+          'font-weight': 500,
+          color: '#334155',
           'text-background-color': '#ffffff',
-          'text-background-opacity': 0.85,
-          'text-background-padding': 2,
+          'text-background-opacity': 0.92,
+          'text-background-padding': '2px',
+          'text-background-shape': 'roundrectangle',
         },
       },
     ],
     layout: {
       name: 'cose',
       animate: false,
-      padding: 30,
-      nodeRepulsion: 6000,
-      idealEdgeLength: 100,
+      padding: 40,
+      nodeRepulsion: 35000,
+      idealEdgeLength: 150,
+      edgeElasticity: 60,
+      nestingFactor: 1.2,
+      gravity: 0.15,
+      numIter: 1000,
     },
   })
+
+  // Ajuste inicial suave
+  cyInstance.fit(undefined, 40)
 }
 
 function fitGraph() {
-  if (cyInstance) cyInstance.fit(undefined, 30)
+  if (cyInstance) cyInstance.fit(undefined, 40)
+}
+
+function reLayout() {
+  if (cyInstance) {
+    cyInstance.layout({
+      name: 'cose',
+      animate: true,
+      animationDuration: 500,
+      padding: 40,
+      nodeRepulsion: 35000,
+      idealEdgeLength: 150,
+    }).run()
+  }
 }
 </script>
 
