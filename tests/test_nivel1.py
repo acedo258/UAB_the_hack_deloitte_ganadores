@@ -57,3 +57,9 @@ def test_cobertura_con_casos_propios(tmp_path):
     assert expected_events({"alert_id": "x", "nota": "ver EDR-0123400 y SIGN-0083865"}) == ["EDR-0123400", "SIGN-0083865"]
     r = check("ALR-20261009-011790", ["EDR-0123400", "EDR-9999999"])
     assert r["found"] == 1 and r["missing"][0]["event_id"] == "EDR-9999999" and not r["missing"][0]["exists_in_db"]
+
+
+def test_ot_fuera_de_origen_habitual_pero_con_cambio_aprobado():
+    # RB-08.1: un origen distinto de ENG-WS01/WMS01 necesita un cambio; si lo hay, no se avisa (se pide verificarlo)
+    c = [x for x in _pack("ALR-20261017-011876").checks if x.id == "RB-08.trafico"][0]
+    assert not c.attention and "CHG-2026-1063" in c.answer and "verificar" in c.answer
