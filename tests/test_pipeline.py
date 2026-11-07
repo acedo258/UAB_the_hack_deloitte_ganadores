@@ -11,6 +11,19 @@ from core.schemas import ContextPack, Ticket, TraceStep
 pytestmark = pytest.mark.skipif(not DB_PATH.exists(), reason="ejecuta antes: python -m core.store")
 
 
+def _ollama_up(model: str = "qwen3-soc") -> bool:
+    """True si Ollama responde en local y tiene el modelo. Sin él, el agente contesta needs_more_info a propósito."""
+    try:
+        import httpx
+        tags = httpx.get("http://localhost:11434/api/tags", timeout=2).json()
+        return any(m.get("name", "").split(":")[0] == model for m in tags.get("models", []))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+needs_ollama = pytest.mark.skipif(not _ollama_up(), reason="necesita Ollama en local con el modelo qwen3-soc")
+
+
 def test_fixtures_validation():
     fix = ROOT / "fixtures"
     packs = sorted(fix.glob("pack_*.json"))
@@ -73,6 +86,7 @@ def test_api_endpoints():
     assert c.get("/incidents").status_code == 200
 
 
+@needs_ollama
 def test_triaje_real_qwen3_soc():
     os.environ["LLM_BASE_URL"] = "http://localhost:11434/v1"
     os.environ["LLM_MODEL"] = "qwen3-soc"
@@ -88,6 +102,7 @@ def test_triaje_real_qwen3_soc():
     assert t.alert_ids == ["ALR-20261005-000301"]
 
 
+@needs_ollama
 def test_defensa_injection_real_qwen3_soc():
     os.environ["LLM_BASE_URL"] = "http://localhost:11434/v1"
     os.environ["LLM_MODEL"] = "qwen3-soc"
@@ -109,6 +124,7 @@ def test_defensa_injection_real_qwen3_soc():
     assert t2.severity == "critical"
 
 
+@needs_ollama
 def test_fingerprint_cache():
     os.environ["LLM_BASE_URL"] = "http://localhost:11434/v1"
     os.environ["LLM_MODEL"] = "qwen3-soc"
@@ -152,3 +168,24 @@ def test_deep_mode_with_tools(monkeypatch):
     tk = triage.triage_alert("ALR-20261009-011793", deep=True, use_cache=False, use_fp_cache=False, on_step=steps.append)
     assert tk.verdict == "true_positive"
     assert any(s.tool == "get_user" and s.kind == "tool" for s in steps)
+
+
+def test_shrink_result_json_valido_y_corto():
+    import json as _json
+    from agent.triage import shrink_result
+    big = {"events": [{"event_id": f"EDR-{i:07d}", "cmd": "powershell -enc " + "A" * 900} for i in range(80)], "total": 80}
+    s = shrink_result(big, 2500)
+    assert len(s) <= 2500
+    data = _json.loads(s)                       # sigue siendo JSON válido (antes se cortaba a lo bruto)
+    assert data["total"] == 80 and data["events"][0]["event_id"] == "EDR-0000000"
+    assert shrink_result({"ok": 1}, 2500) == '{"ok": 1}'
+
+
+def test_cited_ids_missing():
+    from agent.triage import cited_ids_missing
+    from core.schemas import Evidence, LLMTriage
+    out = LLMTriage(title="t", verdict="true_positive", confidence=0.9, summary="s",
+                    evidence=[Evidence(source="edr", event_id="EDR-0000001", finding="x"),
+                              Evidence(source="edr", event_id="EDR-9999999", finding="inventado"),
+                              Evidence(source="intel", finding="sin id")])
+    assert cited_ids_missing(out, '{"timeline": ["EDR-0000001"]}') == ["EDR-9999999"]
