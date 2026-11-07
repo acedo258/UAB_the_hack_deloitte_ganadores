@@ -14,6 +14,7 @@ from datetime import timedelta
 
 from core.config import PACK_MAX_CHARS
 from core.schemas import ContextPack, IntelResult, UntrustedField
+from core.recipes import run_recipes
 from core.store import alert_entities, rows
 from core.tools import ToolBox, _intel_summary, _iso, local_time
 
@@ -123,11 +124,15 @@ def build_pack(alert_id: str, alert: dict | None = None, tb: ToolBox | None = No
         other += tb.alerts_for_entity(e, (t - d7).isoformat(), (t + d7).isoformat(), exclude=a["alert_id"], limit=8)
     other = list({o["alert_id"]: o for o in other}.values())[:12]
 
-    untrusted = find_untrusted(a.get("evidence", {}), "alert.evidence") + find_untrusted(related, "related_events")
+    # Recetas del runbook: las comprobaciones concretas, ya resueltas (core/recipes.py)
+    checks = run_recipes(a, by_type, tb)
+
+    untrusted = (find_untrusted(a.get("evidence", {}), "alert.evidence") + find_untrusted(related, "related_events")
+                 + find_untrusted([ch.events for ch in checks], "checks"))
 
     pack = ContextPack(alert=a, runbook_id=a.get("runbook", ""), rule_info=rule[0] if rule else {},
                        local_time=local_time(a["created_at"]), assets=assets, users=users, matching_changes=changes,
-                       intel=intel, related_events=related, timeline=timeline, other_alerts=other,
+                       intel=intel, related_events=related, timeline=timeline, other_alerts=other, checks=checks,
                        untrusted_fields=untrusted, notes=notes)
     _fit(pack)
     pack.trace = list(tb.trace)
@@ -144,6 +149,13 @@ def _fit(pack: ContextPack) -> None:
             pack.notes.append("Línea temporal recortada por tamaño")
     while size() > PACK_MAX_CHARS and len(pack.other_alerts) > 3:
         pack.other_alerts = pack.other_alerts[:-3]
+    # Las recetas son lo más valioso: se recortan al final, y solo sus eventos de apoyo (nunca la respuesta)
+    while size() > PACK_MAX_CHARS and any(len(c.events) > 2 for c in pack.checks):
+        for c in pack.checks:
+            if len(c.events) > 2:
+                c.events = c.events[:-1]
+        if "Eventos de apoyo de las comprobaciones recortados por tamaño" not in pack.notes:
+            pack.notes.append("Eventos de apoyo de las comprobaciones recortados por tamaño")
     for u in pack.users:          # campos que no aportan
         for k in ("user_id", "created"):
             u.pop(k, None)
