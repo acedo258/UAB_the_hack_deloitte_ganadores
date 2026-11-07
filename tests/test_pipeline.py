@@ -11,6 +11,19 @@ from core.schemas import ContextPack, Ticket, TraceStep
 pytestmark = pytest.mark.skipif(not DB_PATH.exists(), reason="ejecuta antes: python -m core.store")
 
 
+def _ollama_up(model: str = "qwen3-soc") -> bool:
+    """True si Ollama responde en local y tiene el modelo. Sin él, el agente contesta needs_more_info a propósito."""
+    try:
+        import httpx
+        tags = httpx.get("http://localhost:11434/api/tags", timeout=2).json()
+        return any(m.get("name", "").split(":")[0] == model for m in tags.get("models", []))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+needs_ollama = pytest.mark.skipif(not _ollama_up(), reason="necesita Ollama en local con el modelo qwen3-soc")
+
+
 def test_fixtures_validation():
     fix = ROOT / "fixtures"
     packs = sorted(fix.glob("pack_*.json"))
@@ -73,6 +86,7 @@ def test_api_endpoints():
     assert c.get("/incidents").status_code == 200
 
 
+@needs_ollama
 def test_triaje_real_qwen3_soc():
     os.environ["LLM_BASE_URL"] = "http://localhost:11434/v1"
     os.environ["LLM_MODEL"] = "qwen3-soc"
@@ -88,6 +102,7 @@ def test_triaje_real_qwen3_soc():
     assert t.alert_ids == ["ALR-20261005-000301"]
 
 
+@needs_ollama
 def test_defensa_injection_real_qwen3_soc():
     os.environ["LLM_BASE_URL"] = "http://localhost:11434/v1"
     os.environ["LLM_MODEL"] = "qwen3-soc"
@@ -109,6 +124,7 @@ def test_defensa_injection_real_qwen3_soc():
     assert t2.severity == "critical"
 
 
+@needs_ollama
 def test_fingerprint_cache():
     os.environ["LLM_BASE_URL"] = "http://localhost:11434/v1"
     os.environ["LLM_MODEL"] = "qwen3-soc"

@@ -2,14 +2,18 @@
 
     python -m agent.triage ALR-20261009-011793            # modo rápido (una llamada)
     python -m agent.triage ALR-20261009-011793 --deep     # modo investigador (con herramientas)
+    python -m agent.triage --batch-dev [--force]          # las 150 alertas de desarrollo
+    python -m agent.triage --clear-cache                  # borra tickets y huellas guardados (tras cambiar el prompt)
 
 Flujo: pack de contexto (A) -> guardarraíl -> LLM -> validación -> política (D) -> Ticket (para C).
 on_step(TraceStep) permite a la API emitir cada paso en directo a la consola.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import shutil
 import sys
 import time
 from datetime import datetime, timezone
@@ -42,6 +46,21 @@ def _is_outlier_fp(fp: str) -> bool:
         except Exception:  # noqa: BLE001
             _outliers = set()
     return fp in _outliers
+
+
+def prompt_version() -> str:
+    """Huella del prompt base y de las notas del equipo. Va en el nombre de la caché de huellas: si cambia el prompt,
+    los veredictos guardados con el prompt anterior dejan de reutilizarse solos."""
+    h = hashlib.sha1()
+    for f in sorted(PROMPTS.glob("*.md")):
+        h.update(f.read_bytes())
+    return h.hexdigest()[:8]
+
+
+def clear_cache() -> None:
+    for d in ("tickets", "fingerprints"):
+        shutil.rmtree(CACHE_DIR / d, ignore_errors=True)
+    print(f"borradas {CACHE_DIR / 'tickets'} y {CACHE_DIR / 'fingerprints'}")
 
 
 def _now() -> str:
@@ -109,8 +128,11 @@ def _llm_fast(pack: ContextPack, emit: OnStep) -> LLMTriage:
         msg, tokens = llm.chat(msgs)
         try:
             out = _parse(msg.content)
-            emit(TraceStep(step=0, kind="llm", tool=f"llm.triage ({os.getenv('LLM_MODEL', config.LLM_MODEL)})", input={"intento": attempt + 1},
-                           result_summary=f"{out.verdict} · conf {out.confidence:.2f} · {tokens} tokens", ms=int((time.time() - t) * 1000), ts=_now()))
+            est = llm.estimate_tokens(msgs)
+            emit(TraceStep(step=0, kind="llm", tool=f"llm.triage ({os.getenv('LLM_MODEL', config.LLM_MODEL)})",
+                           input={"intento": attempt + 1, "tokens_estimados": est, "num_ctx": llm.num_ctx()},
+                           result_summary=("⚠ el contexto puede no caber en la ventana del modelo · " if est > llm.num_ctx() else "")
+                           + f"{out.verdict} · conf {out.confidence:.2f} · {tokens} tokens", ms=int((time.time() - t) * 1000), ts=_now()))
             return out
         except (ValueError, ValidationError) as e:
             emit(TraceStep(step=0, kind="llm", tool="llm.triage", input={"intento": attempt + 1},
@@ -175,7 +197,7 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
 
     fp = fingerprint(pack.alert)
     fp_safe_name = fp.replace(":", "_")
-    fp_cache = CACHE_DIR / "fingerprints" / f"{fp_safe_name}{'.deep' if deep else ''}.json"
+    fp_cache = CACHE_DIR / "fingerprints" / f"{fp_safe_name}.{prompt_version()}{'.deep' if deep else ''}.json"
     can_use_fp = use_fp_cache and not sus and not _is_outlier_fp(fp)
 
     try:
@@ -211,7 +233,9 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
 
 
 if __name__ == "__main__":
-    if "--batch-dev" in sys.argv:
+    if "--clear-cache" in sys.argv:
+        clear_cache()
+    elif "--batch-dev" in sys.argv:
         from core.store import rows
         dev_alerts = [r["alert_id"] for r in rows("SELECT alert_id FROM alerts WHERE dev_sample ORDER BY created_at")]
         print(f"Triando {len(dev_alerts)} alertas de desarrollo (con caché de huellas)...")

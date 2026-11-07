@@ -50,6 +50,25 @@ def _apply_no_think(messages: list[dict], model: str) -> list[dict]:
     return out
 
 
+CHARS_PER_TOKEN = 2.8      # estimación conservadora para JSON en español con el tokenizador de Qwen
+ANSWER_TOKENS = 1536       # sitio para el JSON de respuesta
+TOOLS_TOKENS = 1024        # sitio para la descripción de las herramientas (modo investigador)
+
+
+def num_ctx() -> int:
+    """Ventana de contexto que se pide a Ollama. Con 8192, el pack más grande + prompt + runbook + respuesta pasa de
+    8.000 tokens y Ollama recorta por el PRINCIPIO, que es donde están las reglas. 12288 cubre el peor caso medido
+    (~9.400 tokens en modo rápido, ~10.400 con herramientas). Es fijo a propósito: si cambia entre llamadas, Ollama
+    recarga el modelo. Se cambia con LLM_NUM_CTX."""
+    return int(os.getenv("LLM_NUM_CTX", "12288"))
+
+
+def estimate_tokens(messages: list[dict], tools: list[dict] | None = None) -> int:
+    """Tokens aproximados de la petición más la respuesta, para avisar en la traza si no cabe."""
+    chars = sum(len(m.get("content") or "") for m in messages)
+    return int(chars / CHARS_PER_TOKEN) + ANSWER_TOKENS + (TOOLS_TOKENS if tools else 0)
+
+
 def chat(messages: list[dict], tools: list[dict] | None = None, json_mode: bool = True, temperature: float = 0.1) -> Any:
     """Devuelve el mensaje del asistente (objeto OpenAI). Reintenta en 429 respetando el límite de Groq."""
     model = os.getenv("LLM_MODEL", config.LLM_MODEL)
@@ -76,7 +95,7 @@ def chat(messages: list[dict], tools: list[dict] | None = None, json_mode: bool 
                 "messages": ollama_msgs,
                 "stream": False,
                 "think": False,
-                "options": {"temperature": temperature, "num_ctx": 8192},
+                "options": {"temperature": temperature, "num_ctx": num_ctx()},
             }
             if tools:
                 payload["tools"] = tools
