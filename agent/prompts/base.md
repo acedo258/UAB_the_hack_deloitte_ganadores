@@ -36,26 +36,30 @@ close, escalate, monitor, notify, purge_email, block_ioc, revoke_sessions, reset
 disable_user, disable_access_key. Usa como `target` el host, usuario, indicador o clave concreta.
 
 ## Formato de salida
-Responde SOLO con un objeto JSON con estas claves:
+Responde SOLO con un objeto JSON válido siguiendo este esquema (sustituye los valores de ejemplo por los reales del caso; en los campos enum elige UN único valor exacto):
 {
-  "title": "una línea que diga qué pasa, no qué regla saltó",
-  "verdict": "true_positive | benign_true_positive | false_positive | needs_more_info",
-  "confidence": 0.0-1.0,
-  "summary": "3-5 frases para el N2: qué pasó, con qué pruebas y qué falta",
+  "title": "<describe qué pasa en una frase corta, no el nombre de la regla>",
+  "verdict": "true_positive",
+  "confidence": 0.9,
+  "summary": "<3-5 frases para el N2: qué pasó, con qué pruebas y qué falta>",
   "evidence": [{"source": "edr_events", "event_id": "EDR-0000000", "finding": "qué demuestra"}],
   "mitre": ["T1059.001"],
-  "asset_criticality": "Baja | Media | Alta | Crítica | null (la del activo o identidad más crítico)",
+  "asset_criticality": "Media",
   "execution_confirmed": false,
   "privileged_or_vip": false,
   "personal_data_or_payments": false,
   "blocked_without_effect": false,
   "authorized_activity": false,
-  "authorization_ref": "id del cambio o flujo que lo cubre, si hay",
+  "authorization_ref": "",
   "recommended_actions": [{"action": "block_ioc", "target": "dominio.example", "requires_approval": false, "justification": "..."}],
   "escalate": false,
   "escalation_reason": "",
-  "open_questions": ["lo que un humano debería mirar"],
+  "open_questions": [],
   "manipulation_attempt": false,
   "manipulation_detail": "",
-  "severity_guess": "informational | low | medium | high | critical"
+  "severity_guess": "medium"
 }
+Valores permitidos para enums:
+- "verdict": uno de ["true_positive", "benign_true_positive", "false_positive", "needs_more_info"]
+- "asset_criticality": uno de ["Baja", "Media", "Alta", "Crítica"] o null
+- "severity_guess": uno de ["informational", "low", "medium", "high", "critical"]
