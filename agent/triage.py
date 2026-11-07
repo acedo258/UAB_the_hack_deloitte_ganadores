@@ -284,7 +284,10 @@ def triage_alert(alert_id: str, deep: bool = False, on_step: OnStep | None = Non
             emit(TraceStep(step=0, kind="llm", tool="llm.mock", result_summary=f"{out.verdict} (heurística, sin LLM)", ts=_now()))
         else:
             out, seen = _llm_deep(pack, tb, emit) if deep else _llm_fast(pack, emit)
-            if not sus and not _is_outlier_fp(fp) and out.verdict != "needs_more_info":
+            # Solo se reutilizan veredictos claros. Un true_positive con un cambio aprobado candidato es discutible:
+            # si el modelo se equivoca, la huella copiaría el error a todas las alertas del patrón.
+            contested = out.verdict == "true_positive" and bool(pack.matching_changes)
+            if not sus and not _is_outlier_fp(fp) and out.verdict != "needs_more_info" and not contested:
                 fp_cache.parent.mkdir(parents=True, exist_ok=True)
                 fp_cache.write_text(out.model_dump_json(indent=2), encoding="utf-8")
     except Exception as e:  # noqa: BLE001  — el sistema nunca se cae: deja la alerta a la persona
