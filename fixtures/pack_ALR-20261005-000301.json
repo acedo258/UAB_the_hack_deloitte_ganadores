@@ -1,0 +1,292 @@
+{
+  "alert": {
+    "alert_id": "ALR-20261005-000301",
+    "created_at": "2026-10-05T07:56:30.000Z",
+    "source_product": "EDR",
+    "rule_id": "UC-EDR-002",
+    "rule_name": "PowerShell con comando codificado",
+    "severity": "medium",
+    "status": "new",
+    "mitre": {
+      "tactic": "Execution",
+      "technique_id": "T1059.001",
+      "technique": "PowerShell"
+    },
+    "description": "Ejecución de PowerShell con -EncodedCommand.",
+    "entities": {
+      "hosts": [
+        {
+          "hostname": "WS-BCN-1174",
+          "ip": "10.10.1.185"
+        }
+      ],
+      "processes": [
+        {
+          "name": "powershell.exe",
+          "parent": "CcmExec.exe"
+        }
+      ]
+    },
+    "evidence": {
+      "parent": "CcmExec.exe (agente SCCM)",
+      "user": "SYSTEM",
+      "decoded_preview": "Get-CimInstance Win32_Product ... Out-File C:\\Windows\\CCM\\Inventory\\sw.json"
+    },
+    "related_events": [
+      "EDR-0005329"
+    ],
+    "runbook": "RB-02"
+  },
+  "runbook_id": "RB-02",
+  "rule_info": {
+    "rule_id": "UC-EDR-002",
+    "nombre": "PowerShell con comando codificado",
+    "fuente": "EDR",
+    "severidad_base": "medium",
+    "tactica": "Execution",
+    "tecnica_id": "T1059.001",
+    "tecnica": "PowerShell",
+    "runbook": "RB-02",
+    "logica": "Ejecución de PowerShell con -EncodedCommand."
+  },
+  "local_time": "lunes 05/10 09:56 (UTC+2)",
+  "assets": [
+    {
+      "asset_id": "A00174",
+      "hostname": "WS-BCN-1174",
+      "ip": "10.10.1.185",
+      "type": "Portátil",
+      "os": "Windows 11 23H2",
+      "criticality": "Media",
+      "zone": "HQ-USERS",
+      "location": "Barcelona HQ",
+      "business_service": "Puesto de trabajo",
+      "owner_upn": "sergi.rubio@tarvia.example",
+      "internet_facing": "False",
+      "edr_installed": "True",
+      "description": null,
+      "vulnerabilities": []
+    }
+  ],
+  "users": [],
+  "matching_changes": [
+    {
+      "id": "CHG-2026-1031",
+      "titulo": "Script de inventario de software vía SCCM (PowerShell codificado)",
+      "inicio": "2026-09-28 00:00",
+      "fin": "2026-12-31 23:59",
+      "solicitante": "Tecnología",
+      "detalle": "svc_sccm ejecuta -EncodedCommand diariamente 08:00-10:00",
+      "alcance": "Todos los puestos",
+      "matched": [
+        "SCCM"
+      ]
+    }
+  ],
+  "intel": [],
+  "related_events": [
+    {
+      "source": "edr_events",
+      "event_id": "EDR-0005329",
+      "ts": "2026-10-05 07:55:00+00",
+      "event_type": "process_start",
+      "hostname": "WS-BCN-1174",
+      "user": "NT AUTHORITY\\SYSTEM",
+      "process_name": "powershell.exe",
+      "process_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "command_line": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand JABpAG4AdgAgAD0AIABHAGUAdAAtAEMAaQBtAEkAbgBzAHQAYQBuAGMAZQAgAFcAaQBuADMAMgBfAFAAcgBvAGQAdQBjAHQA",
+      "parent_name": "CcmExec.exe",
+      "pid": 18688,
+      "parent_pid": 1880,
+      "sha256": "9a3171208537ad708648f69a6e2607af6738f804b99aef1709b309abf34773da",
+      "signer": "Microsoft Windows",
+      "integrity": "System",
+      "details": {
+        "decoded": "$inv = Get-CimInstance Win32_Product | Select Name,Version | ConvertTo-Json | Out-File C:\\Windows\\CCM\\Inventory\\sw.json"
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T07:13:17.657000Z",
+      "source": "dns",
+      "event_id": "DNS-0001407",
+      "line": "{\"event_id\": \"DNS-0001407\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"query\": \"www.boe.es\", \"qtype\": \"A\", \"response\": \"198.18.0.19\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T07:13:17.777000Z",
+      "source": "proxy",
+      "event_id": "PRX-0001520",
+      "line": "{\"event_id\": \"PRX-0001520\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"user\": \"sergi.rubio\", \"method\": \"POST\", \"url\": \"https://www.boe.es/api/v2/\", \"domain\": \"www.boe.es\", \"dst_ip\": \"198.18.0.19\", \"status\": \"200\", \"bytes_out\": \"2178\", \"bytes_in\": \"3…"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T07:55:32.454000Z",
+      "source": "dns",
+      "event_id": "DNS-0001403",
+      "line": "{\"event_id\": \"DNS-0001403\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"query\": \"slack.com\", \"qtype\": \"A\", \"response\": \"198.18.0.24\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T07:55:32.574000Z",
+      "source": "proxy",
+      "event_id": "PRX-0001516",
+      "line": "{\"event_id\": \"PRX-0001516\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"user\": \"sergi.rubio\", \"method\": \"GET\", \"url\": \"https://slack.com/inbox\", \"domain\": \"slack.com\", \"dst_ip\": \"198.18.0.24\", \"status\": \"200\", \"bytes_out\": \"1522\", \"bytes_in\": \"627796…"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T07:57:40.084000Z",
+      "source": "edr_events",
+      "event_id": "EDR-0000849",
+      "line": "{\"event_id\": \"EDR-0000849\", \"event_type\": \"process_start\", \"hostname\": \"WS-BCN-1174\", \"user\": \"TARVIA\\\\sergi.rubio\", \"process_name\": \"OneDrive.exe\", \"process_path\": \"C:\\\\Program Files\\\\Microsoft OneDrive\\\\OneDrive.exe\", \"command_line\": \"\\\"OneDrive.exe\\\" /back…"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T08:15:00.237000Z",
+      "source": "dns",
+      "event_id": "DNS-0001408",
+      "line": "{\"event_id\": \"DNS-0001408\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"query\": \"stackoverflow.com\", \"qtype\": \"A\", \"response\": \"198.18.0.33\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T08:15:00.357000Z",
+      "source": "proxy",
+      "event_id": "PRX-0001521",
+      "line": "{\"event_id\": \"PRX-0001521\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"user\": \"sergi.rubio\", \"method\": \"GET\", \"url\": \"https://stackoverflow.com/api/v2/\", \"domain\": \"stackoverflow.com\", \"dst_ip\": \"198.18.0.33\", \"status\": \"200\", \"bytes_out\": \"2858\", \"…"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T08:37:52.358000Z",
+      "source": "dns",
+      "event_id": "DNS-0001406",
+      "line": "{\"event_id\": \"DNS-0001406\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"query\": \"github.com\", \"qtype\": \"A\", \"response\": \"198.18.0.12\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T08:37:52.478000Z",
+      "source": "proxy",
+      "event_id": "PRX-0001519",
+      "line": "{\"event_id\": \"PRX-0001519\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"user\": \"sergi.rubio\", \"method\": \"GET\", \"url\": \"https://github.com/inbox\", \"domain\": \"github.com\", \"dst_ip\": \"198.18.0.12\", \"status\": \"200\", \"bytes_out\": \"747\", \"bytes_in\": \"28732…"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T09:46:16.978000Z",
+      "source": "dns",
+      "event_id": "DNS-0001409",
+      "line": "{\"event_id\": \"DNS-0001409\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"query\": \"www.google.com\", \"qtype\": \"A\", \"response\": \"198.18.0.7\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T09:46:17.098000Z",
+      "source": "proxy",
+      "event_id": "PRX-0001522",
+      "line": "{\"event_id\": \"PRX-0001522\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"user\": \"sergi.rubio\", \"method\": \"GET\", \"url\": \"https://www.google.com/inbox\", \"domain\": \"www.google.com\", \"dst_ip\": \"198.18.0.7\", \"status\": \"304\", \"bytes_out\": \"1670\", \"bytes_in\"…"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T09:52:31.172000Z",
+      "source": "dns",
+      "event_id": "DNS-0001411",
+      "line": "{\"event_id\": \"DNS-0001411\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"query\": \"github.com\", \"qtype\": \"A\", \"response\": \"198.18.0.12\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T09:52:31.292000Z",
+      "source": "proxy",
+      "event_id": "PRX-0001524",
+      "line": "{\"event_id\": \"PRX-0001524\", \"src_ip\": \"10.10.1.185\", \"hostname\": \"WS-BCN-1174\", \"user\": \"sergi.rubio\", \"method\": \"GET\", \"url\": \"https://github.com/me/drive\", \"domain\": \"github.com\", \"dst_ip\": \"198.18.0.12\", \"status\": \"200\", \"bytes_out\": \"752\", \"bytes_in\": \"45…"
+    },
+    {
+      "entity": "WS-BCN-1174",
+      "ts": "2026-10-05T09:59:13.255000Z",
+      "source": "edr_events",
+      "event_id": "EDR-0000848",
+      "line": "{\"event_id\": \"EDR-0000848\", \"event_type\": \"process_start\", \"hostname\": \"WS-BCN-1174\", \"user\": \"TARVIA\\\\sergi.rubio\", \"process_name\": \"svchost.exe\", \"process_path\": \"C:\\\\Windows\\\\System32\\\\svchost.exe\", \"command_line\": \"svchost.exe -k netsvcs -p\", \"parent_name…"
+    }
+  ],
+  "other_alerts": [],
+  "untrusted_fields": [],
+  "notes": [
+    "Línea temporal de WS-BCN-1174 recortada: {'proxy': 11, 'dns': 10, 'edr_events': 9}"
+  ],
+  "trace": [
+    {
+      "step": 1,
+      "kind": "tool",
+      "tool": "get_alert",
+      "input": {
+        "alert_id": "ALR-20261005-000301"
+      },
+      "result_summary": "UC-EDR-002 medium",
+      "ms": 0,
+      "ts": "2026-11-07T11:44:10.707520+00:00"
+    },
+    {
+      "step": 2,
+      "kind": "tool",
+      "tool": "get_asset",
+      "input": {
+        "key": "WS-BCN-1174"
+      },
+      "result_summary": "WS-BCN-1174 criticidad Media (HQ-USERS, Puesto de trabajo)",
+      "ms": 2,
+      "ts": "2026-11-07T11:44:10.710807+00:00"
+    },
+    {
+      "step": 3,
+      "kind": "tool",
+      "tool": "matching_changes",
+      "input": {
+        "entities": [
+          "10.10.1.185",
+          "WS-BCN-1174"
+        ],
+        "ts": "2026-10-05T07:56:30.000Z"
+      },
+      "result_summary": "CHG-2026-1031 (SCCM)",
+      "ms": 0,
+      "ts": "2026-11-07T11:44:10.711920+00:00"
+    },
+    {
+      "step": 4,
+      "kind": "tool",
+      "tool": "get_events",
+      "input": {
+        "event_ids": [
+          "EDR-0005329"
+        ]
+      },
+      "result_summary": "1/1 eventos encontrados",
+      "ms": 2,
+      "ts": "2026-11-07T11:44:10.714451+00:00"
+    },
+    {
+      "step": 5,
+      "kind": "tool",
+      "tool": "entity_timeline",
+      "input": {
+        "entity": "WS-BCN-1174",
+        "desde": "2026-10-04T07:56:30+00:00",
+        "hasta": "2026-10-06T07:56:30+00:00"
+      },
+      "result_summary": "30 eventos: proxy 11, dns 10, edr_events 9",
+      "ms": 68,
+      "ts": "2026-11-07T11:44:10.782733+00:00"
+    },
+    {
+      "step": 6,
+      "kind": "tool",
+      "tool": "alerts_for_entity",
+      "input": {
+        "entity": "WS-BCN-1174",
+        "desde": "2026-09-28T07:56:30+00:00",
+        "hasta": "2026-10-12T07:56:30+00:00"
+      },
+      "result_summary": "0 alertas",
+      "ms": 3,
+      "ts": "2026-11-07T11:44:10.786078+00:00"
+    }
+  ]
+}

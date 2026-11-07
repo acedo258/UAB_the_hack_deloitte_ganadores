@@ -1,0 +1,195 @@
+{
+  "ticket_id": "TKT-20261020-011897-adb1",
+  "alert_ids": [
+    "ALR-20261020-011897"
+  ],
+  "title": "Lectura de memoria de la aplicación de cobro (TPV) con indicadores maliciosos",
+  "verdict": "true_positive",
+  "confidence": 0.6,
+  "severity": "critical",
+  "severity_rationale": "Regla critical × activo Alta = critical",
+  "affected": {
+    "users": [],
+    "hosts": [
+      "POS-T07-01"
+    ],
+    "business_services": [
+      "Cobro en tienda (PCI DSS)"
+    ],
+    "customers": []
+  },
+  "summary": "[MOCK] Hay indicadores maliciosos o un intento de manipulación.",
+  "evidence": [
+    {
+      "source": "intel",
+      "event_id": "",
+      "finding": "72354b9bbeb20742a892bc3fdc244c80890b1551cab2a150254b18e9d92e4241: sandbox: malicious RAM scraper de TPV"
+    },
+    {
+      "source": "guardrail",
+      "event_id": "",
+      "finding": "alert.evidence.service_description: patrón «no requiere revisi»"
+    },
+    {
+      "source": "guardrail",
+      "event_id": "",
+      "finding": "related_events[0].details.description: patrón «no requiere revisi»"
+    }
+  ],
+  "enrichment": [
+    {
+      "indicator": "72354b9bbeb20742a892bc3fdc244c80890b1551cab2a150254b18e9d92e4241",
+      "type": "sha256",
+      "source": "ti_feed+geoip+sandbox",
+      "result": "sandbox: malicious RAM scraper de TPV"
+    }
+  ],
+  "mitre": [
+    "T1005"
+  ],
+  "recommended_actions": [
+    {
+      "action": "block_ioc",
+      "target": "72354b9bbeb20742a892bc3fdc244c80890b1551cab2a150254b18e9d92e4241",
+      "requires_approval": false,
+      "approver": "",
+      "justification": ""
+    }
+  ],
+  "executed_actions": [],
+  "escalation": {
+    "escalate": true,
+    "to": "N2 de guardia por teléfono + Responsable SOC + CISO",
+    "reason": "true_positive critical; indicadores maliciosos"
+  },
+  "open_questions": [],
+  "triage_seconds": 0.1,
+  "manipulation_attempt": true,
+  "manipulation_detail": "alert.evidence.service_description: patrón «no requiere revisi»; related_events[0].details.description: patrón «no requiere revisi»",
+  "llm_severity": null,
+  "policy_notes": [],
+  "pattern_id": "",
+  "status": "escalated",
+  "trace": [
+    {
+      "step": 1,
+      "kind": "context",
+      "tool": "get_alert",
+      "input": {
+        "alert_id": "ALR-20261020-011897"
+      },
+      "result_summary": "UC-EDR-012 critical",
+      "ms": 19,
+      "ts": "2026-11-07T11:41:05.729677+00:00"
+    },
+    {
+      "step": 2,
+      "kind": "context",
+      "tool": "get_asset",
+      "input": {
+        "key": "POS-T07-01"
+      },
+      "result_summary": "POS-T07-01 criticidad Alta (STORES, Cobro en tienda (PCI DSS))",
+      "ms": 3,
+      "ts": "2026-11-07T11:41:05.734526+00:00"
+    },
+    {
+      "step": 3,
+      "kind": "context",
+      "tool": "intel",
+      "input": {
+        "indicator": "72354b9bbeb20742a892bc3fdc244c80890b1551cab2a150254b18e9d92e4241"
+      },
+      "result_summary": "sandbox: malicious RAM scraper de TPV",
+      "ms": 4,
+      "ts": "2026-11-07T11:41:05.739271+00:00"
+    },
+    {
+      "step": 4,
+      "kind": "context",
+      "tool": "matching_changes",
+      "input": {
+        "entities": [
+          "10.30.7.11",
+          "72354b9bbeb20742a892bc3fdc244c80890b1551cab2a150254b18e9d92e4241",
+          "POS-T07-01"
+        ],
+        "ts": "2026-10-20T08:04:48.000Z"
+      },
+      "result_summary": "ningún cambio aprobado encaja",
+      "ms": 1,
+      "ts": "2026-11-07T11:41:05.740959+00:00"
+    },
+    {
+      "step": 5,
+      "kind": "context",
+      "tool": "get_events",
+      "input": {
+        "event_ids": [
+          "EDR-0123438",
+          "EDR-0123439"
+        ]
+      },
+      "result_summary": "2/2 eventos encontrados",
+      "ms": 7,
+      "ts": "2026-11-07T11:41:05.748615+00:00"
+    },
+    {
+      "step": 6,
+      "kind": "context",
+      "tool": "entity_timeline",
+      "input": {
+        "entity": "POS-T07-01",
+        "desde": "2026-10-19T08:04:48+00:00",
+        "hasta": "2026-10-21T08:04:48+00:00"
+      },
+      "result_summary": "33 eventos: proxy 31, edr_events 2",
+      "ms": 62,
+      "ts": "2026-11-07T11:41:05.810731+00:00"
+    },
+    {
+      "step": 7,
+      "kind": "context",
+      "tool": "alerts_for_entity",
+      "input": {
+        "entity": "POS-T07-01",
+        "desde": "2026-10-13T08:04:48+00:00",
+        "hasta": "2026-10-27T08:04:48+00:00"
+      },
+      "result_summary": "1 alertas: UC-NET-001",
+      "ms": 5,
+      "ts": "2026-11-07T11:41:05.816459+00:00"
+    },
+    {
+      "step": 8,
+      "kind": "guardrail",
+      "tool": "guardrail.untrusted_text",
+      "input": {
+        "campos": 2
+      },
+      "result_summary": "⚠ 2 texto(s) intentan dar instrucciones: alert.evidence.service_description; related_events[0].details.description",
+      "ms": 0,
+      "ts": "2026-11-07T11:41:05.817291+00:00"
+    },
+    {
+      "step": 9,
+      "kind": "llm",
+      "tool": "llm.mock",
+      "input": {},
+      "result_summary": "true_positive (heurística, sin LLM)",
+      "ms": 0,
+      "ts": "2026-11-07T11:41:05.817354+00:00"
+    },
+    {
+      "step": 10,
+      "kind": "policy",
+      "tool": "policy.apply",
+      "input": {
+        "regla": "critical"
+      },
+      "result_summary": "true_positive · severidad critical · escalar True",
+      "ms": 0,
+      "ts": "2026-11-07T11:41:05.817569+00:00"
+    }
+  ]
+}

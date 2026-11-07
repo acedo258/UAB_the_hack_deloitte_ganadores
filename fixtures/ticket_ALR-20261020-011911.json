@@ -1,0 +1,227 @@
+{
+  "ticket_id": "TKT-20261020-011911-153e",
+  "alert_ids": [
+    "ALR-20261020-011911"
+  ],
+  "title": "Clic en URL de phishing con indicadores maliciosos",
+  "verdict": "true_positive",
+  "confidence": 0.6,
+  "severity": "high",
+  "severity_rationale": "Regla high × activo Alta = high",
+  "affected": {
+    "users": [
+      "lucia.castro@tarvia.example"
+    ],
+    "hosts": [
+      "WS-BCN-1053"
+    ],
+    "business_services": [
+      "Puesto de trabajo"
+    ],
+    "customers": []
+  },
+  "summary": "[MOCK] Hay indicadores maliciosos o un intento de manipulación.",
+  "evidence": [
+    {
+      "source": "guardrail",
+      "event_id": "",
+      "finding": "alert.evidence.email_body_excerpt: patrón «display:none»"
+    }
+  ],
+  "enrichment": [
+    {
+      "indicator": "packaging-iberia-portal.example",
+      "type": "domain",
+      "source": "ti_feed+geoip+sandbox",
+      "result": "sin coincidencias (desconocido, no limpio)"
+    }
+  ],
+  "mitre": [
+    "T1566.002"
+  ],
+  "recommended_actions": [
+    {
+      "action": "escalate",
+      "target": "ticket",
+      "requires_approval": false,
+      "approver": "",
+      "justification": "Acción por defecto según veredicto"
+    }
+  ],
+  "executed_actions": [],
+  "escalation": {
+    "escalate": true,
+    "to": "N2 (misma jornada) + Responsable SOC",
+    "reason": "true_positive high; indicadores maliciosos"
+  },
+  "open_questions": [],
+  "triage_seconds": 0.2,
+  "manipulation_attempt": true,
+  "manipulation_detail": "alert.evidence.email_body_excerpt: patrón «display:none»",
+  "llm_severity": null,
+  "policy_notes": [],
+  "pattern_id": "",
+  "status": "proposed",
+  "trace": [
+    {
+      "step": 1,
+      "kind": "context",
+      "tool": "get_alert",
+      "input": {
+        "alert_id": "ALR-20261020-011911"
+      },
+      "result_summary": "UC-EML-003 high",
+      "ms": 7,
+      "ts": "2026-11-07T11:43:53.482510+00:00"
+    },
+    {
+      "step": 2,
+      "kind": "context",
+      "tool": "get_asset",
+      "input": {
+        "key": "WS-BCN-1053"
+      },
+      "result_summary": "WS-BCN-1053 criticidad Alta (HQ-USERS, Puesto de trabajo)",
+      "ms": 3,
+      "ts": "2026-11-07T11:43:53.487363+00:00"
+    },
+    {
+      "step": 3,
+      "kind": "context",
+      "tool": "get_user",
+      "input": {
+        "key": "lucia.castro"
+      },
+      "result_summary": "Lucía Castro · Responsable de Tesorería · tipo user · priv False · VIP False",
+      "ms": 3,
+      "ts": "2026-11-07T11:43:53.491089+00:00"
+    },
+    {
+      "step": 4,
+      "kind": "context",
+      "tool": "intel",
+      "input": {
+        "indicator": "packaging-iberia-portal.example"
+      },
+      "result_summary": "sin coincidencias (desconocido, no limpio)",
+      "ms": 3,
+      "ts": "2026-11-07T11:43:53.494360+00:00"
+    },
+    {
+      "step": 5,
+      "kind": "context",
+      "tool": "matching_changes",
+      "input": {
+        "entities": [
+          "10.10.1.64",
+          "<ded601db.fv8812@packaging-iberia-pagos.example>",
+          "WS-BCN-1053",
+          "lucia.castro",
+          "packaging-iberia-portal.example"
+        ],
+        "ts": "2026-10-20T07:05:22.000Z"
+      },
+      "result_summary": "ningún cambio aprobado encaja",
+      "ms": 1,
+      "ts": "2026-11-07T11:43:53.496192+00:00"
+    },
+    {
+      "step": 6,
+      "kind": "context",
+      "tool": "get_events",
+      "input": {
+        "event_ids": [
+          "CLK-0017754",
+          "PRX-0212748",
+          "PRX-0212749"
+        ]
+      },
+      "result_summary": "3/3 eventos encontrados",
+      "ms": 10,
+      "ts": "2026-11-07T11:43:53.506325+00:00"
+    },
+    {
+      "step": 7,
+      "kind": "context",
+      "tool": "entity_timeline",
+      "input": {
+        "entity": "lucia.castro",
+        "desde": "2026-10-19T07:05:22+00:00",
+        "hasta": "2026-10-21T07:05:22+00:00"
+      },
+      "result_summary": "45 eventos: proxy 14, edr_events 12, email 8, idp_signins 6, email_clicks 2, vpn 2, ad_events 1",
+      "ms": 79,
+      "ts": "2026-11-07T11:43:53.586173+00:00"
+    },
+    {
+      "step": 8,
+      "kind": "context",
+      "tool": "entity_timeline",
+      "input": {
+        "entity": "WS-BCN-1053",
+        "desde": "2026-10-19T07:05:22+00:00",
+        "hasta": "2026-10-21T07:05:22+00:00"
+      },
+      "result_summary": "37 eventos: proxy 14, edr_events 12, dns 11",
+      "ms": 69,
+      "ts": "2026-11-07T11:43:53.656219+00:00"
+    },
+    {
+      "step": 9,
+      "kind": "context",
+      "tool": "alerts_for_entity",
+      "input": {
+        "entity": "lucia.castro",
+        "desde": "2026-10-13T07:05:22+00:00",
+        "hasta": "2026-10-27T07:05:22+00:00"
+      },
+      "result_summary": "3 alertas: UC-EML-001, UC-IDP-001, UC-IDP-006",
+      "ms": 4,
+      "ts": "2026-11-07T11:43:53.660725+00:00"
+    },
+    {
+      "step": 10,
+      "kind": "context",
+      "tool": "alerts_for_entity",
+      "input": {
+        "entity": "WS-BCN-1053",
+        "desde": "2026-10-13T07:05:22+00:00",
+        "hasta": "2026-10-27T07:05:22+00:00"
+      },
+      "result_summary": "0 alertas",
+      "ms": 3,
+      "ts": "2026-11-07T11:43:53.664052+00:00"
+    },
+    {
+      "step": 11,
+      "kind": "guardrail",
+      "tool": "guardrail.untrusted_text",
+      "input": {
+        "campos": 3
+      },
+      "result_summary": "⚠ 1 texto(s) intentan dar instrucciones: alert.evidence.email_body_excerpt",
+      "ms": 0,
+      "ts": "2026-11-07T11:43:53.665272+00:00"
+    },
+    {
+      "step": 12,
+      "kind": "llm",
+      "tool": "llm.mock",
+      "input": {},
+      "result_summary": "true_positive (heurística, sin LLM)",
+      "ms": 0,
+      "ts": "2026-11-07T11:43:53.665330+00:00"
+    },
+    {
+      "step": 13,
+      "kind": "policy",
+      "tool": "policy.apply",
+      "input": {
+        "regla": "high"
+      },
+      "result_summary": "true_positive · severidad high · escalar True",
+      "ms": 0,
+      "ts": "2026-11-07T11:43:53.665538+00:00"
+    }
+  ]
+}

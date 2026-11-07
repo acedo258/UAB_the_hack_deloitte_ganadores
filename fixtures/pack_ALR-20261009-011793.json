@@ -1,0 +1,403 @@
+{
+  "alert": {
+    "alert_id": "ALR-20261009-011793",
+    "created_at": "2026-10-09T13:06:11.000Z",
+    "source_product": "NGFW",
+    "rule_id": "UC-NET-002",
+    "rule_name": "Conexión a IP en lista de bloqueo de TI",
+    "severity": "high",
+    "status": "new",
+    "mitre": {
+      "tactic": "Command and Control",
+      "technique_id": "T1071",
+      "technique": "Application Layer Protocol"
+    },
+    "description": "Tráfico saliente hacia un indicador presente en la inteligencia de amenazas.",
+    "entities": {
+      "hosts": [
+        {
+          "hostname": "WS-BCN-1770",
+          "ip": "10.10.3.95"
+        }
+      ],
+      "ips": [
+        "107.174.115.43"
+      ]
+    },
+    "evidence": {
+      "dst_ip": "107.174.115.43",
+      "dst_port": 443,
+      "ti_match": "Cobalt Strike C2 (feed interno)",
+      "action": "allow"
+    },
+    "related_events": [
+      "FW-0025180"
+    ],
+    "runbook": "RB-09"
+  },
+  "runbook_id": "RB-09",
+  "rule_info": {
+    "rule_id": "UC-NET-002",
+    "nombre": "Conexión a IP en lista de bloqueo de TI",
+    "fuente": "NGFW",
+    "severidad_base": "high",
+    "tactica": "Command and Control",
+    "tecnica_id": "T1071",
+    "tecnica": "Application Layer Protocol",
+    "runbook": "RB-09",
+    "logica": "Tráfico saliente hacia un indicador presente en la inteligencia de amenazas."
+  },
+  "local_time": "viernes 09/10 15:06 (UTC+2)",
+  "assets": [
+    {
+      "asset_id": "A00770",
+      "hostname": "WS-BCN-1770",
+      "ip": "10.10.3.95",
+      "type": "Portátil",
+      "os": "Windows 11 23H2",
+      "criticality": "Media",
+      "zone": "HQ-USERS",
+      "location": "Barcelona HQ",
+      "business_service": "Puesto de trabajo",
+      "owner_upn": "marta.puig@tarvia.example",
+      "internet_facing": "False",
+      "edr_installed": "True",
+      "description": null,
+      "vulnerabilities": []
+    }
+  ],
+  "users": [],
+  "matching_changes": [],
+  "intel": [
+    {
+      "indicator": "107.174.115.43",
+      "type": "ip",
+      "source": "ti_feed+geoip+sandbox",
+      "result": "TIP: malicious (Cobalt Strike, conf 90) · US HostPapa [is_hosting]",
+      "malicious": true
+    }
+  ],
+  "related_events": [
+    {
+      "source": "firewall",
+      "event_id": "FW-0025180",
+      "ts": "2026-10-09 13:02:00+00",
+      "src_ip": "10.10.3.95",
+      "src_port": "55120",
+      "dst_ip": "107.174.115.43",
+      "dst_port": "443",
+      "proto": "TCP",
+      "action": "allow",
+      "rule": "OUTBOUND-WEB",
+      "bytes": "48211",
+      "zone_src": "HQ-USERS",
+      "zone_dst": "EXTERNAL"
+    }
+  ],
+  "timeline": [
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-08T14:19:42.157000Z",
+      "source": "proxy",
+      "event_id": "PRX-0034695",
+      "line": "{\"event_id\": \"PRX-0034695\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"user\": \"marta.puig\", \"method\": \"GET\", \"url\": \"https://caixabank.es/l/7b54b6\", \"domain\": \"caixabank.es\", \"dst_ip\": \"198.18.0.44\", \"status\": \"200\", \"bytes_out\": \"600\", \"bytes_in\": \"…"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-08T15:09:29.697000Z",
+      "source": "proxy",
+      "event_id": "PRX-0034696",
+      "line": "{\"event_id\": \"PRX-0034696\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"user\": \"marta.puig\", \"method\": \"GET\", \"url\": \"https://retailforum.example/l/3d8e99\", \"domain\": \"retailforum.example\", \"dst_ip\": \"198.18.0.59\", \"status\": \"200\", \"bytes_out\": \"600\",…"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-08T15:46:16.729000Z",
+      "source": "dns",
+      "event_id": "DNS-0031499",
+      "line": "{\"event_id\": \"DNS-0031499\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"query\": \"chatgpt.com\", \"qtype\": \"A\", \"response\": \"198.18.0.39\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-08T15:46:16.849000Z",
+      "source": "proxy",
+      "event_id": "PRX-0034690",
+      "line": "{\"event_id\": \"PRX-0034690\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"user\": \"marta.puig\", \"method\": \"POST\", \"url\": \"https://chatgpt.com/search?q=\", \"domain\": \"chatgpt.com\", \"dst_ip\": \"198.18.0.39\", \"status\": \"304\", \"bytes_out\": \"3449\", \"bytes_in\": …"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-08T15:49:00.339000Z",
+      "source": "edr_events",
+      "event_id": "EDR-0020209",
+      "line": "{\"event_id\": \"EDR-0020209\", \"event_type\": \"process_start\", \"hostname\": \"WS-BCN-1770\", \"user\": \"TARVIA\\\\marta.puig\", \"process_name\": \"msedge.exe\", \"process_path\": \"C:\\\\Program Files (x86)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe\", \"command_line\": \"\\\"msedge.ex…"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-09T07:08:05.404000Z",
+      "source": "dns",
+      "event_id": "DNS-0039916",
+      "line": "{\"event_id\": \"DNS-0039916\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"query\": \"cdn.shopify-assets.example\", \"qtype\": \"A\", \"response\": \"198.18.0.26\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-09T07:08:05.524000Z",
+      "source": "proxy",
+      "event_id": "PRX-0043985",
+      "line": "{\"event_id\": \"PRX-0043985\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"user\": \"marta.puig\", \"method\": \"POST\", \"url\": \"https://cdn.shopify-assets.example/me/drive\", \"domain\": \"cdn.shopify-assets.example\", \"dst_ip\": \"198.18.0.26\", \"status\": \"204\", \"byt…"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-09T08:15:19.964000Z",
+      "source": "dns",
+      "event_id": "DNS-0039920",
+      "line": "{\"event_id\": \"DNS-0039920\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"query\": \"www.lavanguardia.com\", \"qtype\": \"A\", \"response\": \"198.18.0.18\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-09T08:15:20.084000Z",
+      "source": "proxy",
+      "event_id": "PRX-0043989",
+      "line": "{\"event_id\": \"PRX-0043989\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"user\": \"marta.puig\", \"method\": \"GET\", \"url\": \"https://www.lavanguardia.com/search?q=\", \"domain\": \"www.lavanguardia.com\", \"dst_ip\": \"198.18.0.18\", \"status\": \"304\", \"bytes_out\": \"14…"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-09T08:15:21.713000Z",
+      "source": "dns",
+      "event_id": "DNS-0039917",
+      "line": "{\"event_id\": \"DNS-0039917\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"query\": \"www.dropbox.com\", \"qtype\": \"A\", \"response\": \"198.18.0.43\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-09T08:15:21.833000Z",
+      "source": "proxy",
+      "event_id": "PRX-0043986",
+      "line": "{\"event_id\": \"PRX-0043986\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"user\": \"marta.puig\", \"method\": \"GET\", \"url\": \"https://www.dropbox.com/search?q=\", \"domain\": \"www.dropbox.com\", \"dst_ip\": \"198.18.0.43\", \"status\": \"200\", \"bytes_out\": \"2447\", \"byte…"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-09T08:27:26.696000Z",
+      "source": "dns",
+      "event_id": "DNS-0039921",
+      "line": "{\"event_id\": \"DNS-0039921\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"query\": \"sharepoint.com\", \"qtype\": \"A\", \"response\": \"198.18.0.6\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-09T08:27:26.816000Z",
+      "source": "proxy",
+      "event_id": "PRX-0043990",
+      "line": "{\"event_id\": \"PRX-0043990\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"user\": \"marta.puig\", \"method\": \"GET\", \"url\": \"https://sharepoint.com/static/app.js\", \"domain\": \"sharepoint.com\", \"dst_ip\": \"198.18.0.6\", \"status\": \"302\", \"bytes_out\": \"2316\", \"byt…"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-09T09:14:31.121000Z",
+      "source": "dns",
+      "event_id": "DNS-0039925",
+      "line": "{\"event_id\": \"DNS-0039925\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"query\": \"outlook.office365.com\", \"qtype\": \"A\", \"response\": \"198.18.0.3\", \"rcode\": \"NOERROR\"}"
+    },
+    {
+      "entity": "WS-BCN-1770",
+      "ts": "2026-10-09T09:14:31.241000Z",
+      "source": "proxy",
+      "event_id": "PRX-0043994",
+      "line": "{\"event_id\": \"PRX-0043994\", \"src_ip\": \"10.10.3.95\", \"hostname\": \"WS-BCN-1770\", \"user\": \"marta.puig\", \"method\": \"GET\", \"url\": \"https://outlook.office365.com/favicon.ico\", \"domain\": \"outlook.office365.com\", \"dst_ip\": \"198.18.0.3\", \"status\": \"304\", \"bytes_out\": …"
+    },
+    {
+      "entity": "107.174.115.43",
+      "ts": "2026-10-10T00:56:00Z",
+      "source": "firewall",
+      "event_id": "FW-0026543",
+      "line": "{\"event_id\": \"FW-0026543\", \"src_ip\": \"10.20.6.63\", \"src_port\": \"56541\", \"dst_ip\": \"107.174.115.43\", \"dst_port\": \"443\", \"proto\": \"TCP\", \"action\": \"allow\", \"rule\": \"OUTBOUND-SERVERS-WEB\", \"bytes\": \"8806\", \"zone_src\": \"DC-SERVERS\", \"zone_dst\": \"EXTERNAL\"}"
+    },
+    {
+      "entity": "107.174.115.43",
+      "ts": "2026-10-10T04:37:00Z",
+      "source": "firewall",
+      "event_id": "FW-0026544",
+      "line": "{\"event_id\": \"FW-0026544\", \"src_ip\": \"10.20.6.63\", \"src_port\": \"58782\", \"dst_ip\": \"107.174.115.43\", \"dst_port\": \"443\", \"proto\": \"TCP\", \"action\": \"allow\", \"rule\": \"OUTBOUND-SERVERS-WEB\", \"bytes\": \"7479\", \"zone_src\": \"DC-SERVERS\", \"zone_dst\": \"EXTERNAL\"}"
+    },
+    {
+      "entity": "107.174.115.43",
+      "ts": "2026-10-10T08:38:00Z",
+      "source": "firewall",
+      "event_id": "FW-0026545",
+      "line": "{\"event_id\": \"FW-0026545\", \"src_ip\": \"10.20.6.63\", \"src_port\": \"52659\", \"dst_ip\": \"107.174.115.43\", \"dst_port\": \"443\", \"proto\": \"TCP\", \"action\": \"allow\", \"rule\": \"OUTBOUND-SERVERS-WEB\", \"bytes\": \"8657\", \"zone_src\": \"DC-SERVERS\", \"zone_dst\": \"EXTERNAL\"}"
+    },
+    {
+      "entity": "107.174.115.43",
+      "ts": "2026-10-10T12:18:00Z",
+      "source": "firewall",
+      "event_id": "FW-0026546",
+      "line": "{\"event_id\": \"FW-0026546\", \"src_ip\": \"10.20.6.63\", \"src_port\": \"55636\", \"dst_ip\": \"107.174.115.43\", \"dst_port\": \"443\", \"proto\": \"TCP\", \"action\": \"allow\", \"rule\": \"OUTBOUND-SERVERS-WEB\", \"bytes\": \"5996\", \"zone_src\": \"DC-SERVERS\", \"zone_dst\": \"EXTERNAL\"}"
+    }
+  ],
+  "other_alerts": [
+    {
+      "alert_id": "ALR-20261006-000754",
+      "created_at": "2026-10-06T09:41:31.830000Z",
+      "rule_id": "UC-EDR-003",
+      "rule_name": "Malware detectado por el antivirus",
+      "severity": "medium"
+    },
+    {
+      "alert_id": "ALR-20261009-011791",
+      "created_at": "2026-10-09T09:31:10Z",
+      "rule_id": "UC-EDR-001",
+      "rule_name": "Proceso hijo sospechoso de Office o intérprete de scripts",
+      "severity": "high"
+    },
+    {
+      "alert_id": "ALR-20261009-011792",
+      "created_at": "2026-10-09T11:32:15Z",
+      "rule_id": "UC-NET-001",
+      "rule_name": "Beaconing a dominio poco frecuente",
+      "severity": "medium"
+    },
+    {
+      "alert_id": "ALR-20261010-011794",
+      "created_at": "2026-10-10T00:16:58Z",
+      "rule_id": "UC-EDR-008",
+      "rule_name": "Comandos de reconocimiento de dominio",
+      "severity": "medium"
+    },
+    {
+      "alert_id": "ALR-20261010-011795",
+      "created_at": "2026-10-10T00:23:30Z",
+      "rule_id": "UC-EDR-004",
+      "rule_name": "Acceso a la memoria de LSASS",
+      "severity": "critical"
+    },
+    {
+      "alert_id": "ALR-20261010-011796",
+      "created_at": "2026-10-10T00:32:09Z",
+      "rule_id": "UC-NET-003",
+      "rule_name": "Escaneo de puertos interno",
+      "severity": "medium"
+    },
+    {
+      "alert_id": "ALR-20261010-011797",
+      "created_at": "2026-10-10T00:42:37Z",
+      "rule_id": "UC-NET-004",
+      "rule_name": "Movimiento lateral SMB/RDP/PsExec",
+      "severity": "high"
+    }
+  ],
+  "untrusted_fields": [],
+  "notes": [
+    "Línea temporal de WS-BCN-1770 recortada: {'proxy': 1258, 'dns': 64, 'edr_events': 19}"
+  ],
+  "trace": [
+    {
+      "step": 1,
+      "kind": "tool",
+      "tool": "get_alert",
+      "input": {
+        "alert_id": "ALR-20261009-011793"
+      },
+      "result_summary": "UC-NET-002 high",
+      "ms": 7,
+      "ts": "2026-11-07T11:44:10.793874+00:00"
+    },
+    {
+      "step": 2,
+      "kind": "tool",
+      "tool": "get_asset",
+      "input": {
+        "key": "WS-BCN-1770"
+      },
+      "result_summary": "WS-BCN-1770 criticidad Media (HQ-USERS, Puesto de trabajo)",
+      "ms": 2,
+      "ts": "2026-11-07T11:44:10.797063+00:00"
+    },
+    {
+      "step": 3,
+      "kind": "tool",
+      "tool": "intel",
+      "input": {
+        "indicator": "107.174.115.43"
+      },
+      "result_summary": "TIP: malicious (Cobalt Strike, conf 90) · US HostPapa [is_hosting]",
+      "ms": 4,
+      "ts": "2026-11-07T11:44:10.801629+00:00"
+    },
+    {
+      "step": 4,
+      "kind": "tool",
+      "tool": "matching_changes",
+      "input": {
+        "entities": [
+          "10.10.3.95",
+          "107.174.115.43",
+          "WS-BCN-1770"
+        ],
+        "ts": "2026-10-09T13:06:11.000Z"
+      },
+      "result_summary": "ningún cambio aprobado encaja",
+      "ms": 1,
+      "ts": "2026-11-07T11:44:10.802728+00:00"
+    },
+    {
+      "step": 5,
+      "kind": "tool",
+      "tool": "get_events",
+      "input": {
+        "event_ids": [
+          "FW-0025180"
+        ]
+      },
+      "result_summary": "1/1 eventos encontrados",
+      "ms": 2,
+      "ts": "2026-11-07T11:44:10.805481+00:00"
+    },
+    {
+      "step": 6,
+      "kind": "tool",
+      "tool": "entity_timeline",
+      "input": {
+        "entity": "WS-BCN-1770",
+        "desde": "2026-10-08T13:06:11+00:00",
+        "hasta": "2026-10-10T13:06:11+00:00"
+      },
+      "result_summary": "1341 eventos: proxy 1258, dns 64, edr_events 19",
+      "ms": 72,
+      "ts": "2026-11-07T11:44:10.878197+00:00"
+    },
+    {
+      "step": 7,
+      "kind": "tool",
+      "tool": "entity_timeline",
+      "input": {
+        "entity": "107.174.115.43",
+        "desde": "2026-10-08T13:06:11+00:00",
+        "hasta": "2026-10-10T13:06:11+00:00"
+      },
+      "result_summary": "5 eventos: firewall 5",
+      "ms": 22,
+      "ts": "2026-11-07T11:44:10.901098+00:00"
+    },
+    {
+      "step": 8,
+      "kind": "tool",
+      "tool": "alerts_for_entity",
+      "input": {
+        "entity": "WS-BCN-1770",
+        "desde": "2026-10-02T13:06:11+00:00",
+        "hasta": "2026-10-16T13:06:11+00:00"
+      },
+      "result_summary": "7 alertas: UC-EDR-001, UC-EDR-003, UC-EDR-004, UC-EDR-008, UC-NET-001, UC-NET-003, UC-NET-004",
+      "ms": 4,
+      "ts": "2026-11-07T11:44:10.905227+00:00"
+    },
+    {
+      "step": 9,
+      "kind": "tool",
+      "tool": "alerts_for_entity",
+      "input": {
+        "entity": "107.174.115.43",
+        "desde": "2026-10-02T13:06:11+00:00",
+        "hasta": "2026-10-16T13:06:11+00:00"
+      },
+      "result_summary": "0 alertas",
+      "ms": 2,
+      "ts": "2026-11-07T11:44:10.907903+00:00"
+    }
+  ]
+}

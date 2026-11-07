@@ -1,0 +1,2 @@
+{"alert_id": "ALR-20261005-000301", "verdict": "benign_true_positive", "severity": "informational", "escalate": false, "group": "", "nota": "SCCM, cubierto por CHG-2026-1031"}
+{"alert_id": "ALR-20261020-011911", "verdict": "true_positive", "severity": "high", "escalate": true, "group": "INC-lucia-castro-aitm", "nota": "Phishing con prompt injection oculto en el cuerpo"}
