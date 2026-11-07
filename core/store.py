@@ -17,11 +17,13 @@ Normalización de entidades (etype):
     host   -> hostname en MAYÚSCULAS
     ip     -> tal cual
     domain -> minúsculas
-    hash, customer, session, access_key, message_id
+    hash, customer, session, access_key, message_id, app (idp_audit.target no-usuario), db_object (sql_audit.object),
+    file   -> nombre de fichero en minúsculas (adjuntos de correo <-> scripts en command_line del EDR)
 """
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -38,24 +40,40 @@ CTX = DATA_DIR / "01_contexto"
 
 # Expresiones SQL de entidades por fuente: (etype, expresión)
 U = "norm_user({})"
+URL_DOMAIN = "lower(regexp_extract({}, '^[a-z]+://([^/:?#]+)', 1))"
+# sha256 de adjuntos y de lo que hay dentro de los .zip (enlaza correo -> ejecución en EDR)
+ATT_HASHES = ("lower(unnest(list_concat(list_transform(attachments, lambda a: a.sha256), "
+              "flatten(list_transform(attachments, lambda a: coalesce(list_transform(a.contains, lambda x: x.sha256), []))))))")
+ATT_NAMES = ("lower(unnest(list_concat(list_transform(attachments, lambda a: a.name), "
+             "flatten(list_transform(attachments, lambda a: coalesce(list_transform(a.contains, lambda x: x.name), []))))))")
+# Ficheros "de usuario" en la línea de comandos (sin .exe/.dll, que serían hubs)
+_EXT = "js|jse|vbs|vbe|wsf|hta|lnk|iso|img|zip|rar|7z|ps1|bat|cmd|msi|docm|xlsm|doc|docx|xls|xlsx|pdf|one"
+CMD_FILES = f"lower(unnest(regexp_extract_all(command_line, '([A-Za-z0-9_.\\-]+\\.(?:{_EXT}))\\b', 1)))"
 ENTITY_MAP: dict[str, list[tuple[str, str]]] = {
     "ad_events":    [("user", U.format("subject")), ("user", U.format("target")), ("host", "upper(src_host)"), ("host", "upper(dc)")],
-    "ai_gateway":   [("customer", "customer_id"), ("ip", "src_ip"), ("session", "session_id")],
+    "ai_gateway":   [("customer", "customer_id"), ("ip", "src_ip"), ("session", "session_id"),
+                     ("customer", "unnest(list_transform(tool_calls, lambda t: t.args.customer_id))")],  # cliente víctima
     "cicd_builds":  [("host", "upper(runner)")],
-    "cloudtrail":   [("user", U.format("userIdentity.userName")), ("access_key", "userIdentity.accessKeyId"), ("ip", "sourceIPAddress")],
+    "cloudtrail":   [("user", U.format("userIdentity.userName")), ("access_key", "userIdentity.accessKeyId"), ("ip", "sourceIPAddress"),
+                     ("user", U.format("requestParameters.userName"))],   # a quién crea / da permisos
     "dlp":          [("user", U.format('"user"')), ("host", "upper(hostname)"), ("domain", "lower(destination)")],
     "dns":          [("ip", "src_ip"), ("host", "upper(hostname)"), ("domain", "lower(query)")],
     "ecom_account": [("customer", "customer_id"), ("ip", "src_ip")],
     "ecom_auth":    [("customer", "customer_id"), ("ip", "src_ip")],
-    "edr_events":   [("host", "upper(hostname)"), ("user", U.format('"user"')), ("hash", "lower(sha256)")],
+    "edr_events":   [("host", "upper(hostname)"), ("user", U.format('"user"')), ("hash", "lower(sha256)"),
+                     ("file", CMD_FILES)],   # el sha256 del EDR es el del intérprete; el script se ve por nombre
     "email":        [("user", U.format("sender")), ("ip", "sender_ip"), ("message_id", "message_id"),
-                     ("user", U.format("unnest(recipients)"))],
-    "email_clicks": [("user", U.format('"user"')), ("ip", "src_ip"), ("message_id", "message_id")],
+                     ("user", U.format("unnest(recipients)")),
+                     ("hash", ATT_HASHES), ("file", ATT_NAMES), ("domain", URL_DOMAIN.format("unnest(urls)"))],
+    "email_clicks": [("user", U.format('"user"')), ("ip", "src_ip"), ("message_id", "message_id"),
+                     ("domain", URL_DOMAIN.format("url"))],
     "firewall":     [("ip", "src_ip"), ("ip", "dst_ip")],
-    "idp_audit":    [("user", U.format("actor_upn")), ("ip", "src_ip")],
+    "idp_audit":    [("user", U.format("actor_upn")), ("ip", "src_ip"),
+                     ("user", f"CASE WHEN target LIKE '%@%' THEN {U.format('target')} END"),   # target puede ser usuario...
+                     ("app", "CASE WHEN target NOT LIKE '%@%' THEN target END")],              # ...o app OAuth/carpeta
     "idp_signins":  [("user", U.format("user_upn")), ("ip", "src_ip"), ("session", "session_id")],
     "proxy":        [("ip", "src_ip"), ("host", "upper(hostname)"), ("user", U.format('"user"')), ("domain", "lower(domain)"), ("ip", "dst_ip")],
-    "sql_audit":    [("user", U.format('"user"')), ("host", "upper(client_host)")],
+    "sql_audit":    [("user", U.format('"user"')), ("host", "upper(client_host)"), ("db_object", "lower(object)")],
     "vpn":          [("user", U.format('"user"')), ("ip", "src_ip"), ("ip", "assigned_ip")],
     "waf":          [("ip", "src_ip")],
 }
@@ -102,6 +120,12 @@ def norm_user(x: str | None) -> str | None:
     if x.endswith("@tarvia.example"):
         x = x[: -len("@tarvia.example")]
     return x or None
+
+
+def url_domain(url: str | None) -> str | None:
+    """Igual que URL_DOMAIN en SQL: 'https://www.x.example/a' -> 'www.x.example'."""
+    m = re.match(r"^[a-z]+://([^/:?#]+)", (url or "").strip().lower())
+    return m.group(1) if m else None
 
 
 # ------------------------------------------------------------------ construcción
@@ -210,6 +234,11 @@ def alert_entities(a: dict) -> list[tuple[str, str]]:
     for f in ent.get("files", []) or []:
         if f.get("sha256"):
             out.add((f["sha256"].lower(), "hash"))
+        if f.get("name"):
+            out.add((f["name"].lower(), "file"))
+    for u in ent.get("urls", []) or []:
+        if (d := url_domain(u)):
+            out.add((d, "domain"))
     for c in ent.get("customers", []) or []:
         if c.get("customer_id"):
             out.add((c["customer_id"], "customer"))
