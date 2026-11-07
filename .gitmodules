@@ -1,0 +1,3 @@
+[submodule "data/DTT-UAB-The-Hack"]
+	path = data/DTT-UAB-The-Hack
+	url = https://github.com/dttdfr/DTT-UAB-The-Hack

@@ -24,9 +24,10 @@ Así es exacto, reproducible y no se puede manipular con un prompt injection.
 ## Puesta en marcha (10 minutos)
 
 ```bash
-# 1. Datos de Deloitte dentro de data/
-git clone https://github.com/acedo258/UAB_the_hack_deloitte_ganadores && cd UAB_the_hack_deloitte_ganadores
-git clone https://github.com/dttdfr/DTT-UAB-The-Hack data/DTT-UAB-The-Hack
+# 1. Clonar (el dataset de Deloitte viene como submódulo en data/DTT-UAB-The-Hack)
+git clone --recurse-submodules https://github.com/acedo258/UAB_the_hack_deloitte_ganadores
+cd UAB_the_hack_deloitte_ganadores
+# ¿Ya lo habías clonado sin el submódulo?  git submodule update --init --depth 1
 
 # 2. Python
 pip install -r requirements.txt

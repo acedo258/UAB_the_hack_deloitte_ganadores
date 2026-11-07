@@ -1,5 +1,6 @@
 data/*
 !data/.gitkeep
+!data/DTT-UAB-The-Hack
 .env
 __pycache__/
 .pytest_cache/
