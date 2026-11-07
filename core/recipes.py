@@ -681,6 +681,12 @@ def rb10(c: Ctx) -> None:
         c.add("RB-10.paquete", "RB-10.1 ¿El paquete es conocido en nuestros builds o es nuevo?", paquete)
 
     def credenciales():
+        # Solo cuenta si ESTE build leyó credenciales de AWS: si no las leyó, el uso posterior de una clave
+        # no tiene que ver con él (antes avisaban todos los builds de la semana del ataque)
+        read = sorted(set(re.findall(r"AWS_[A-Z_]+", json.dumps(c.ev, ensure_ascii=False) + " ".join(
+            json.dumps(s.get("details"), default=str) for s in steps))))
+        if not read:
+            return "el build no leyó credenciales de AWS: el uso posterior de claves no se le puede atribuir", False, [], 0
         # Identidades cloud usadas tras el build desde IPs que esa identidad nunca había usado
         r = rows("""SELECT c.* FROM cloudtrail c WHERE c.ts BETWEEN ? AND ? AND NOT EXISTS (
                         SELECT 1 FROM cloudtrail p WHERE p.userIdentity.accessKeyId = c.userIdentity.accessKeyId
@@ -688,7 +694,7 @@ def rb10(c: Ctx) -> None:
                     ORDER BY c.ts LIMIT 10""", [iso(b0), iso(b0 + 3 * D), iso(b0)])
         keys = sorted({(x.get("userIdentity") or {}).get("accessKeyId") for x in r} - {None})
         evs = [ev(x, ["eventName", "userIdentity", "sourceIPAddress", "requestParameters"]) for x in r]
-        return (f"{len(r)} llamadas a AWS en las 72 h siguientes desde IPs nuevas para su clave"
+        return (f"el build leyó {', '.join(read)}; {len(r)} llamadas a AWS en las 72 h siguientes desde IPs nuevas para su clave"
                 + (f" (claves: {', '.join(keys)})" if keys else ""), bool(r), evs, len(r))
     c.add("RB-10.credenciales", "RB-10.4 ¿Se usaron credenciales del entorno después, desde un origen nuevo? (CloudTrail, 72 h)", credenciales)
 
