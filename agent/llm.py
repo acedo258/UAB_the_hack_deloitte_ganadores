@@ -138,6 +138,13 @@ def chat(messages: list[dict], tools: list[dict] | None = None, json_mode: bool 
                 raise
 
     kwargs: dict[str, Any] = {"model": model, "messages": msgs, "temperature": temperature}
+    # Opciones propias del servidor, sin tocar el código. Por ejemplo, para un modelo que razona antes de responder:
+    #   LLM_EXTRA_BODY='{"reasoning_effort": "low"}'   o   '{"chat_template_kwargs": {"enable_thinking": false}}'
+    # Si el servidor no las acepta (400), se reintenta sin ellas.
+    if os.getenv("LLM_EXTRA_BODY"):
+        kwargs["extra_body"] = json.loads(os.environ["LLM_EXTRA_BODY"])
+    if os.getenv("LLM_MAX_TOKENS"):
+        kwargs["max_tokens"] = int(os.environ["LLM_MAX_TOKENS"])
     if tools:
         kwargs["tools"] = tools
     elif json_mode:
